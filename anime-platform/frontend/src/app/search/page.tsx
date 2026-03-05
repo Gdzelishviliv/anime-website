@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Search as SearchIcon } from 'lucide-react';
@@ -8,7 +8,7 @@ import { animeApi } from '@/lib/api';
 import { AnimeCard } from '@/components/anime/AnimeCard';
 import { AnimeGridSkeleton } from '@/components/ui/Loading';
 
-export default function SearchPage() {
+function SearchContent() {
   const searchParams = useSearchParams();
   const query = searchParams.get('q') || '';
   const [results, setResults] = useState<any[]>([]);
@@ -90,5 +90,13 @@ export default function SearchPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<AnimeGridSkeleton />}>
+      <SearchContent />
+    </Suspense>
   );
 }
