@@ -140,10 +140,9 @@ export class AnimeController {
       throw new HttpException('Invalid URL', HttpStatus.BAD_REQUEST);
     }
 
-    const allowedHosts = ['uwucdn.top', 'kwik.cx', 'megacloud.tv', 'rapid-cloud.co'];
-    const isAllowed = allowedHosts.some(host => parsedUrl.hostname.endsWith(host));
-    if (!isAllowed) {
-      throw new HttpException('Host not allowed', HttpStatus.FORBIDDEN);
+    const allowedProtocols = ['http:', 'https:'];
+    if (!allowedProtocols.includes(parsedUrl.protocol)) {
+      throw new HttpException('Only HTTP(S) URLs allowed', HttpStatus.FORBIDDEN);
     }
 
     try {
