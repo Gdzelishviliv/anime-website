@@ -4,6 +4,7 @@ dist/
 .next/
 .env
 *.log
+*.tsbuildinfo
 coverage/
 .DS_Store
 Thumbs.db

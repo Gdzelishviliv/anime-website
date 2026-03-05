@@ -116,8 +116,11 @@ export class AnimeController {
   async watchSources(
     @Param('episodeId') episodeId: string,
     @Query('provider') provider?: string,
+    @Query('ep') ep?: string,
   ) {
-    const sources = await this.consumetService.getEpisodeSources(episodeId, provider);
+    // The episode ID format is "anime-slug?ep=123" but ?ep=123 gets parsed as query param
+    const fullEpisodeId = ep ? `${episodeId}?ep=${ep}` : episodeId;
+    const sources = await this.consumetService.getEpisodeSources(fullEpisodeId, provider);
     if (!sources) {
       return { data: null, error: 'Failed to fetch sources — provider may be unavailable' };
     }
