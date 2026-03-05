@@ -13,18 +13,21 @@ export class ConsumetService {
   }
 
   async searchAnime(query: string) {
+    // Try Hianime first (more reliable for sources), then AnimePahe
+    try {
+      const results = await this.hianime.search(query);
+      const hianimeResults = (results.results || []).map((r: any) => ({ ...r, provider: 'hianime' }));
+      if (hianimeResults.length) return hianimeResults;
+    } catch (error) {
+      this.logger.warn(`Hianime search failed: ${(error as Error).message}`);
+    }
+
     try {
       const results = await this.animePahe.search(query);
       return results.results || [];
     } catch (error) {
-      this.logger.warn(`AnimePahe search failed, trying Hianime: ${(error as Error).message}`);
-      try {
-        const results = await this.hianime.search(query);
-        return (results.results || []).map((r: any) => ({ ...r, provider: 'hianime' }));
-      } catch (err) {
-        this.logger.error(`All search providers failed for "${query}": ${(err as Error).message}`);
-        return [];
-      }
+      this.logger.error(`AnimePahe search also failed for "${query}": ${(error as Error).message}`);
+      return [];
     }
   }
 
@@ -43,27 +46,14 @@ export class ConsumetService {
     try {
       this.logger.log(`Fetching sources for "${episodeId}" with provider "${provider || 'animepahe'}"`);
       const sources = await fetcher.fetchEpisodeSources(episodeId);
-      this.logger.log(`Sources result: ${JSON.stringify(sources ? { sourcesCount: sources.sources?.length, downloadCount: sources.download?.length, headers: sources.headers } : 'null')}`);
+      this.logger.log(`Sources result: sourcesCount=${sources?.sources?.length}, downloadCount=${sources?.download?.length}`);
       if (sources && (sources.sources?.length || sources.download?.length)) {
         return sources;
       }
-      this.logger.warn(`No sources from ${provider || 'animepahe'} for "${episodeId}", trying fallback...`);
+      this.logger.warn(`No usable sources from ${provider || 'animepahe'} for "${episodeId}"`);
     } catch (error) {
-      this.logger.error(`fetchEpisodeSources failed for "${episodeId}" (${provider || 'animepahe'}): ${(error as Error).message}\n${(error as Error).stack}`);
+      this.logger.error(`fetchEpisodeSources failed (${provider || 'animepahe'}): ${(error as Error).message}`);
     }
-
-    // Fallback: try the other provider
-    if (provider !== 'hianime') {
-      try {
-        this.logger.log(`Trying Hianime fallback for "${episodeId}"`);
-        const sources = await this.hianime.fetchEpisodeSources(episodeId);
-        this.logger.log(`Hianime result: ${JSON.stringify(sources ? { sourcesCount: sources.sources?.length, downloadCount: sources.download?.length } : 'null')}`);
-        if (sources) return sources;
-      } catch (err) {
-        this.logger.error(`Hianime fallback also failed: ${(err as Error).message}`);
-      }
-    }
-
     return null;
   }
 
