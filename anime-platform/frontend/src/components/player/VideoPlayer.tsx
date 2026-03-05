@@ -50,6 +50,9 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
   const [hoverX, setHoverX] = useState(0);
   const [activeSubtitle, setActiveSubtitle] = useState<string | null>(null);
   const [showSubMenu, setShowSubMenu] = useState(false);
+  const [subtitleCues, setSubtitleCues] = useState<{start: number; end: number; text: string}[]>([]);
+  const [currentCueText, setCurrentCueText] = useState<string>('');
+  const subtitleCacheRef = useRef<Map<string, {start: number; end: number; text: string}[]>>(new Map());
 
   // Initialize video source
   useEffect(() => {
@@ -125,44 +128,99 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
     };
   }, [src]);
 
-  // Set up subtitle tracks
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !subtitles?.length) return;
+  // Parse VTT text into cue objects
+  const parseVTT = useCallback((vttText: string) => {
+    const cues: {start: number; end: number; text: string}[] = [];
+    const blocks = vttText.replace(/\r/g, '').split('\n\n');
+    for (const block of blocks) {
+      const lines = block.trim().split('\n');
+      const timeLine = lines.find(l => l.includes('-->'));
+      if (!timeLine) continue;
+      const [startStr, endStr] = timeLine.split('-->');
+      const parseTime = (t: string) => {
+        const parts = t.trim().split(':');
+        if (parts.length === 3) {
+          const [h, m, s] = parts;
+          return parseInt(h) * 3600 + parseInt(m) * 60 + parseFloat(s.replace(',', '.'));
+        } else if (parts.length === 2) {
+          const [m, s] = parts;
+          return parseInt(m) * 60 + parseFloat(s.replace(',', '.'));
+        }
+        return 0;
+      };
+      const start = parseTime(startStr);
+      const end = parseTime(endStr);
+      const textIdx = lines.indexOf(timeLine);
+      const text = lines.slice(textIdx + 1).join('\n').replace(/<[^>]+>/g, '').trim();
+      if (text) cues.push({ start, end, text });
+    }
+    return cues;
+  }, []);
 
-    // Remove existing tracks
-    while (video.firstChild) {
-      video.removeChild(video.firstChild);
+  // Load and activate a subtitle by language
+  const loadSubtitleTrack = useCallback(async (lang: string | null) => {
+    if (!lang || !subtitles?.length) {
+      setSubtitleCues([]);
+      setCurrentCueText('');
+      setActiveSubtitle(null);
+      return;
+    }
+    const sub = subtitles.find(s => s.lang === lang);
+    if (!sub) return;
+
+    // Check cache first
+    if (subtitleCacheRef.current.has(sub.url)) {
+      setSubtitleCues(subtitleCacheRef.current.get(sub.url)!);
+      setActiveSubtitle(lang);
+      return;
     }
 
-    // Find English subtitle by default
+    try {
+      const res = await fetch(sub.url);
+      const text = await res.text();
+      const cues = parseVTT(text);
+      subtitleCacheRef.current.set(sub.url, cues);
+      setSubtitleCues(cues);
+      setActiveSubtitle(lang);
+    } catch {
+      setSubtitleCues([]);
+    }
+  }, [subtitles, parseVTT]);
+
+  // Auto-select English subtitle on load
+  useEffect(() => {
+    if (!subtitles?.length) {
+      setSubtitleCues([]);
+      setActiveSubtitle(null);
+      return;
+    }
+    subtitleCacheRef.current.clear();
     const engSub = subtitles.find(
       (s) => s.lang.toLowerCase().includes('english') || s.lang.toLowerCase() === 'en'
     );
-
-    subtitles.forEach((sub, idx) => {
-      const track = document.createElement('track');
-      track.kind = 'subtitles';
-      track.label = sub.lang;
-      track.srclang = sub.lang.slice(0, 2).toLowerCase();
-      track.src = sub.url;
-      const isDefault = engSub ? sub === engSub : false;
-      if (isDefault) {
-        track.default = true;
-      }
-      video.appendChild(track);
-    });
-
-    // Set track modes after adding to DOM
-    for (let i = 0; i < video.textTracks.length; i++) {
-      const isEng = subtitles[i] && subtitles[i] === engSub;
-      video.textTracks[i].mode = isEng ? 'showing' : 'hidden';
-    }
-
     if (engSub) {
-      setActiveSubtitle(engSub.lang);
+      loadSubtitleTrack(engSub.lang);
     }
   }, [subtitles, src]);
+
+  // Update current cue text based on video time
+  useEffect(() => {
+    if (!subtitleCues.length) {
+      setCurrentCueText('');
+      return;
+    }
+    const video = videoRef.current;
+    if (!video) return;
+
+    const updateCue = () => {
+      const t = video.currentTime;
+      const cue = subtitleCues.find(c => t >= c.start && t <= c.end);
+      setCurrentCueText(cue?.text || '');
+    };
+
+    video.addEventListener('timeupdate', updateCue);
+    return () => video.removeEventListener('timeupdate', updateCue);
+  }, [subtitleCues]);
 
   // Video event listeners
   useEffect(() => {
@@ -367,12 +425,7 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
   };
 
   const selectSubtitle = (lang: string | null) => {
-    const video = videoRef.current;
-    if (!video) return;
-    for (let i = 0; i < video.textTracks.length; i++) {
-      video.textTracks[i].mode = video.textTracks[i].label === lang ? 'showing' : 'hidden';
-    }
-    setActiveSubtitle(lang);
+    loadSubtitleTrack(lang);
     setShowSubMenu(false);
   };
 
@@ -446,6 +499,17 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
         className="absolute inset-0 w-full h-full object-contain cursor-pointer"
         playsInline
       />
+
+      {/* Subtitle Overlay */}
+      {currentCueText && (
+        <div className="absolute bottom-16 left-0 right-0 z-10 flex justify-center pointer-events-none px-4">
+          <div className="bg-black/80 text-white text-sm sm:text-base md:text-lg px-4 py-2 rounded-lg max-w-[90%] text-center leading-relaxed">
+            {currentCueText.split('\n').map((line, i) => (
+              <span key={i}>{line}{i < currentCueText.split('\n').length - 1 && <br />}</span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Loading Overlay */}
       {isLoading && (
