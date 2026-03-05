@@ -14,8 +14,9 @@ async function bootstrap() {
     }),
   );
 
+  const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
   app.enableCors({
-    origin: ['http://localhost:3000'],
+    origin: corsOrigin.split(',').map(o => o.trim()),
     credentials: true,
   });
 
@@ -28,7 +29,8 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
 
-  await app.listen(3001);
-  console.log('Auth Service running on port 3001');
+  const port = process.env.PORT || 3001;
+  await app.listen(port);
+  console.log(`Auth Service running on port ${port}`);
 }
 bootstrap();

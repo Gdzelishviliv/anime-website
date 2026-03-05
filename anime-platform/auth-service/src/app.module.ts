@@ -13,16 +13,28 @@ import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get('DB_HOST', 'localhost'),
-        port: config.get<number>('DB_PORT', 5432),
-        username: config.get('DB_USER', 'auth_user'),
-        password: config.get('DB_PASSWORD', 'auth_secret_password'),
-        database: config.get('DB_NAME', 'auth_db'),
-        autoLoadEntities: true,
-        synchronize: true, // Disable in production
-      }),
+      useFactory: (config: ConfigService) => {
+        const dbUrl = config.get('DATABASE_URL');
+        if (dbUrl) {
+          return {
+            type: 'postgres',
+            url: dbUrl,
+            ssl: { rejectUnauthorized: false },
+            autoLoadEntities: true,
+            synchronize: true,
+          };
+        }
+        return {
+          type: 'postgres',
+          host: config.get('DB_HOST', 'localhost'),
+          port: config.get<number>('DB_PORT', 5432),
+          username: config.get('DB_USER', 'auth_user'),
+          password: config.get('DB_PASSWORD', 'auth_secret_password'),
+          database: config.get('DB_NAME', 'auth_db'),
+          autoLoadEntities: true,
+          synchronize: true,
+        };
+      },
     }),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({

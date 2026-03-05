@@ -10,7 +10,11 @@ async function bootstrap() {
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
   );
 
-  app.enableCors({ origin: ['http://localhost:3000'], credentials: true });
+  const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
+  app.enableCors({
+    origin: corsOrigin.split(',').map(o => o.trim()),
+    credentials: true,
+  });
 
   const config = new DocumentBuilder()
     .setTitle('Streaming Service')
@@ -21,7 +25,8 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
 
-  await app.listen(3004);
-  console.log('Streaming Service running on port 3004');
+  const port = process.env.PORT || 3004;
+  await app.listen(port);
+  console.log(`Streaming Service running on port ${port}`);
 }
 bootstrap();

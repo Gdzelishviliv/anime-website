@@ -13,16 +13,28 @@ import { JwtMiddleware } from './middleware/jwt.middleware';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get('DB_HOST', 'localhost'),
-        port: parseInt(config.get('DB_PORT', '5432'), 10),
-        username: config.get('DB_USER', 'streaming_user'),
-        password: config.get('DB_PASSWORD', 'streaming_secret_password'),
-        database: config.get('DB_NAME', 'streaming_db'),
-        autoLoadEntities: true,
-        synchronize: true,
-      }),
+      useFactory: (config: ConfigService) => {
+        const dbUrl = config.get('DATABASE_URL');
+        if (dbUrl) {
+          return {
+            type: 'postgres',
+            url: dbUrl,
+            ssl: { rejectUnauthorized: false },
+            autoLoadEntities: true,
+            synchronize: true,
+          };
+        }
+        return {
+          type: 'postgres',
+          host: config.get('DB_HOST', 'localhost'),
+          port: parseInt(config.get('DB_PORT', '5432'), 10),
+          username: config.get('DB_USER', 'streaming_user'),
+          password: config.get('DB_PASSWORD', 'streaming_secret_password'),
+          database: config.get('DB_NAME', 'streaming_db'),
+          autoLoadEntities: true,
+          synchronize: true,
+        };
+      },
     }),
     StreamingModule,
     RedisModule,
