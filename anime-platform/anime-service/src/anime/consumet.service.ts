@@ -42,17 +42,34 @@ export class ConsumetService {
   }
 
   async getEpisodeSources(episodeId: string, provider?: string) {
-    const fetcher = provider === 'hianime' ? this.hianime : this.animePahe;
+    // For Hianime, try multiple servers
+    if (provider === 'hianime') {
+      const servers = ['hd-1', 'hd-2', undefined];
+      for (const server of servers) {
+        try {
+          this.logger.log(`Fetching sources for "${episodeId}" with hianime server="${server || 'default'}"`);
+          const sources = await this.hianime.fetchEpisodeSources(episodeId, server as any);
+          this.logger.log(`Hianime result: sourcesCount=${sources?.sources?.length}, downloadCount=${sources?.download?.length}`);
+          if (sources && (sources.sources?.length || sources.download?.length)) {
+            return sources;
+          }
+        } catch (error) {
+          this.logger.warn(`Hianime server "${server || 'default'}" failed: ${(error as Error).message}`);
+        }
+      }
+      this.logger.error(`All Hianime servers failed for "${episodeId}"`);
+      return null;
+    }
+
+    // AnimePahe
     try {
-      this.logger.log(`Fetching sources for "${episodeId}" with provider "${provider || 'animepahe'}"`);
-      const sources = await fetcher.fetchEpisodeSources(episodeId);
-      this.logger.log(`Sources result: sourcesCount=${sources?.sources?.length}, downloadCount=${sources?.download?.length}`);
+      this.logger.log(`Fetching sources for "${episodeId}" with provider "animepahe"`);
+      const sources = await this.animePahe.fetchEpisodeSources(episodeId);
       if (sources && (sources.sources?.length || sources.download?.length)) {
         return sources;
       }
-      this.logger.warn(`No usable sources from ${provider || 'animepahe'} for "${episodeId}"`);
     } catch (error) {
-      this.logger.error(`fetchEpisodeSources failed (${provider || 'animepahe'}): ${(error as Error).message}`);
+      this.logger.error(`AnimePahe fetchEpisodeSources failed: ${(error as Error).message}`);
     }
     return null;
   }
