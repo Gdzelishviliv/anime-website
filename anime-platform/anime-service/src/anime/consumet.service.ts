@@ -43,12 +43,13 @@ export class ConsumetService {
     try {
       this.logger.log(`Fetching sources for "${episodeId}" with provider "${provider || 'animepahe'}"`);
       const sources = await fetcher.fetchEpisodeSources(episodeId);
+      this.logger.log(`Sources result: ${JSON.stringify(sources ? { sourcesCount: sources.sources?.length, downloadCount: sources.download?.length, headers: sources.headers } : 'null')}`);
       if (sources && (sources.sources?.length || sources.download?.length)) {
         return sources;
       }
       this.logger.warn(`No sources from ${provider || 'animepahe'} for "${episodeId}", trying fallback...`);
     } catch (error) {
-      this.logger.error(`fetchEpisodeSources failed for "${episodeId}" (${provider || 'animepahe'}): ${(error as Error).message}`);
+      this.logger.error(`fetchEpisodeSources failed for "${episodeId}" (${provider || 'animepahe'}): ${(error as Error).message}\n${(error as Error).stack}`);
     }
 
     // Fallback: try the other provider
@@ -56,6 +57,7 @@ export class ConsumetService {
       try {
         this.logger.log(`Trying Hianime fallback for "${episodeId}"`);
         const sources = await this.hianime.fetchEpisodeSources(episodeId);
+        this.logger.log(`Hianime result: ${JSON.stringify(sources ? { sourcesCount: sources.sources?.length, downloadCount: sources.download?.length } : 'null')}`);
         if (sources) return sources;
       } catch (err) {
         this.logger.error(`Hianime fallback also failed: ${(err as Error).message}`);

@@ -118,6 +118,9 @@ export class AnimeController {
     @Query('provider') provider?: string,
   ) {
     const sources = await this.consumetService.getEpisodeSources(episodeId, provider);
+    if (!sources) {
+      return { data: null, error: 'Failed to fetch sources — provider may be unavailable' };
+    }
     return { data: sources };
   }
 
