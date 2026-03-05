@@ -8,6 +8,8 @@ import {
   Res,
   ParseIntPipe,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Body,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -18,6 +20,12 @@ import { StreamingService } from './streaming.service';
 @Controller('streaming')
 export class StreamingController {
   constructor(private readonly streamingService: StreamingService) {}
+
+  private requireAuth(userId: string) {
+    if (!userId) {
+      throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+    }
+  }
 
   @Get('anime/:animeId/episodes')
   @ApiOperation({ summary: 'Get available streams for an anime' })
@@ -41,6 +49,7 @@ export class StreamingController {
     @Param('streamFileId') streamFileId: string,
     @Headers('x-user-id') userId: string,
   ) {
+    this.requireAuth(userId);
     return this.streamingService.generateSignedUrl(streamFileId, userId);
   }
 
@@ -98,6 +107,7 @@ export class StreamingController {
       totalDurationSeconds: number;
     },
   ) {
+    this.requireAuth(userId);
     await this.streamingService.emitWatchEvent({ userId, ...body });
     return { message: 'Watch event recorded' };
   }

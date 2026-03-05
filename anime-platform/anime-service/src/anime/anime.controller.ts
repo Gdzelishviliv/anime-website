@@ -93,6 +93,35 @@ export class AnimeController {
     return { data: results };
   }
 
+  @Get('watch/home')
+  @ApiOperation({ summary: 'Get aniwatch home page data (spotlight, trending, etc.)' })
+  async watchHome() {
+    const data = await this.consumetService.getHomePage();
+    return { data };
+  }
+
+  @Get('watch/category/:category')
+  @ApiOperation({ summary: 'Get anime by category (top-airing, most-popular, etc.)' })
+  @ApiQuery({ name: 'page', required: false })
+  async watchCategory(
+    @Param('category') category: string,
+    @Query('page') page?: number,
+  ) {
+    const data = await this.consumetService.getCategoryAnime(category, page || 1);
+    return { data };
+  }
+
+  @Get('watch/genre/:genre')
+  @ApiOperation({ summary: 'Get anime by genre' })
+  @ApiQuery({ name: 'page', required: false })
+  async watchGenre(
+    @Param('genre') genre: string,
+    @Query('page') page?: number,
+  ) {
+    const data = await this.consumetService.getGenreAnime(genre, page || 1);
+    return { data };
+  }
+
   @Get('watch/episodes/:animeSlug')
   @ApiOperation({ summary: 'Get episodes for an anime' })
   async watchEpisodes(

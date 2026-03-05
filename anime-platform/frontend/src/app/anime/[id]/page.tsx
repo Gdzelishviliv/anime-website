@@ -107,7 +107,7 @@ export default function AnimeDetailPage() {
   return (
     <div className="min-h-screen">
       {/* Hero Banner */}
-      <div className="relative h-[400px] overflow-hidden">
+      <div className="relative h-[250px] sm:h-[400px] overflow-hidden">
         <Image
           src={imageUrl}
           alt={anime.title}
@@ -119,15 +119,15 @@ export default function AnimeDetailPage() {
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-64 relative z-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-40 sm:-mt-64 relative z-10">
         <div className="flex flex-col md:flex-row gap-8">
           {/* Poster */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="flex-shrink-0"
+            className="flex-shrink-0 mx-auto md:mx-0"
           >
-            <div className="relative w-[250px] aspect-[3/4] rounded-xl overflow-hidden shadow-2xl">
+            <div className="relative w-[180px] sm:w-[250px] aspect-[3/4] rounded-xl overflow-hidden shadow-2xl">
               <Image
                 src={imageUrl}
                 alt={anime.title}

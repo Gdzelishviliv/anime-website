@@ -16,12 +16,14 @@ interface AnimeCardProps {
     episodes?: number;
     status?: string;
     type?: string;
+    href?: string;
   };
   index?: number;
 }
 
 export function AnimeCard({ anime, index = 0 }: AnimeCardProps) {
   const id = anime.mal_id || anime.malId;
+  const href = anime.href || `/anime/${id}`;
   const imageUrl =
     anime.images?.jpg?.large_image_url ||
     anime.images?.jpg?.image_url ||
@@ -34,7 +36,7 @@ export function AnimeCard({ anime, index = 0 }: AnimeCardProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.3 }}
     >
-      <Link href={`/anime/${id}`} className="group block">
+      <Link href={href} className="group block">
         <div className="card hover:border-primary-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary-500/10">
           <div className="relative aspect-[3/4] overflow-hidden">
             <Image

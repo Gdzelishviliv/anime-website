@@ -26,6 +26,7 @@ export default function EpisodePage() {
   const [provider, setProvider] = useState<string | undefined>(undefined);
   const [streamUrl, setStreamUrl] = useState<string>('');
   const [streamHeaders, setStreamHeaders] = useState<Record<string, string>>({});
+  const [subtitles, setSubtitles] = useState<{url: string; lang: string}[]>([]);
   const [loading, setLoading] = useState(true);
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
@@ -114,6 +115,18 @@ export default function EpisodePage() {
         setStreamUrl(proxyUrl);
       } else {
         setSourceError('No streaming sources available for this episode');
+      }
+
+      // Extract subtitles
+      if (sourcesData?.subtitles?.length) {
+        const ANIME_URL = process.env.NEXT_PUBLIC_ANIME_URL || 'http://localhost:3003';
+        const subs = sourcesData.subtitles.map((s: any) => ({
+          url: `${ANIME_URL}/anime/watch/proxy?url=${encodeURIComponent(s.url)}&referer=`,
+          lang: s.lang,
+        }));
+        setSubtitles(subs);
+      } else {
+        setSubtitles([]);
       }
     } catch {
       setSourceError('Failed to load streaming source');
@@ -228,6 +241,7 @@ export default function EpisodePage() {
                   poster={imageUrl}
                   title={currentEpisode?.title || `Episode ${episodeNumber}`}
                   headers={streamHeaders}
+                  subtitles={subtitles}
                   onProgress={handleProgress}
                 />
               ) : (
@@ -303,7 +317,7 @@ export default function EpisodePage() {
               <div className="overflow-y-auto max-h-[500px] p-3 custom-scrollbar">
                 {totalEps <= 50 ? (
                   // Grid view for fewer episodes
-                  <div className="grid grid-cols-5 gap-1.5">
+                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5">
                     {Array.from({ length: totalEps }, (_, idx) => (
                       <Link
                         key={idx}
@@ -323,7 +337,7 @@ export default function EpisodePage() {
                   </div>
                 ) : (
                   // Compact list for many episodes
-                  <div className="grid grid-cols-6 gap-1">
+                  <div className="grid grid-cols-5 sm:grid-cols-6 gap-1">
                     {Array.from({ length: totalEps }, (_, idx) => (
                       <Link
                         key={idx}

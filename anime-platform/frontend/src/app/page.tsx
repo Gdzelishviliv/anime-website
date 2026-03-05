@@ -8,9 +8,22 @@ import { AnimeGrid } from '@/components/anime/AnimeGrid';
 import { AnimeGridSkeleton } from '@/components/ui/Loading';
 import { ErrorDisplay } from '@/components/ui/ErrorDisplay';
 
+function mapAniwatchAnime(anime: any) {
+  return {
+    title: anime.name || anime.title,
+    imageUrl: anime.poster || anime.image,
+    type: anime.type,
+    episodes: anime.episodes?.sub || anime.episodes?.total || 0,
+    href: `/search?q=${encodeURIComponent(anime.name || anime.title || '')}`,
+  };
+}
+
 export default function HomePage() {
+  const [spotlight, setSpotlight] = useState<any[]>([]);
   const [trending, setTrending] = useState<any[]>([]);
-  const [topAnime, setTopAnime] = useState<any[]>([]);
+  const [topAiring, setTopAiring] = useState<any[]>([]);
+  const [mostPopular, setMostPopular] = useState<any[]>([]);
+  const [latestEpisodes, setLatestEpisodes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,13 +32,24 @@ export default function HomePage() {
       setLoading(true);
       setError(null);
 
-      const [trendingRes, topRes] = await Promise.all([
-        animeApi.getTrending(1, 12),
-        animeApi.getTop(1, 12),
-      ]);
+      const homeRes = await animeApi.watchHome();
+      const home = homeRes.data?.data;
 
-      setTrending(trendingRes.data?.data || []);
-      setTopAnime(topRes.data?.data || []);
+      if (home) {
+        setSpotlight((home.spotlightAnimes || []).slice(0, 6).map(mapAniwatchAnime));
+        setTrending((home.trendingAnimes || []).slice(0, 12).map(mapAniwatchAnime));
+        setTopAiring((home.topAiringAnimes || []).slice(0, 12).map(mapAniwatchAnime));
+        setMostPopular((home.mostPopularAnimes || []).slice(0, 12).map(mapAniwatchAnime));
+        setLatestEpisodes((home.latestEpisodeAnimes || []).slice(0, 12).map(mapAniwatchAnime));
+      } else {
+        // Fallback to Jikan
+        const [trendingRes, topRes] = await Promise.all([
+          animeApi.getTrending(1, 12),
+          animeApi.getTop(1, 12),
+        ]);
+        setTrending(trendingRes.data?.data || []);
+        setTopAiring(topRes.data?.data || []);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load anime data');
     } finally {
@@ -40,7 +64,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <section className="relative bg-gradient-to-b from-primary-950/50 to-dark-950 py-20 px-4">
+      <section className="relative bg-gradient-to-b from-primary-950/50 to-dark-950 py-12 sm:py-20 px-4">
         <div className="max-w-7xl mx-auto text-center">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -54,7 +78,7 @@ export default function HomePage() {
               Your ultimate anime streaming experience. Discover trending shows,
               track your progress, and stream in high quality.
             </p>
-            <div className="flex items-center justify-center space-x-8 text-dark-400">
+            <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-dark-400">
               <div className="flex items-center space-x-2">
                 <Tv className="w-5 h-5 text-primary-400" />
                 <span className="text-sm">Thousands of titles</span>
@@ -85,13 +109,22 @@ export default function HomePage() {
           <ErrorDisplay message={error} onRetry={fetchData} />
         ) : (
           <>
+            {spotlight.length > 0 && (
+              <AnimeGrid anime={spotlight} title="✨ Spotlight" />
+            )}
             {trending.length > 0 && (
               <AnimeGrid anime={trending} title="🔥 Trending Now" />
             )}
-            {topAnime.length > 0 && (
-              <AnimeGrid anime={topAnime} title="⭐ Top Rated" />
+            {latestEpisodes.length > 0 && (
+              <AnimeGrid anime={latestEpisodes} title="🆕 Latest Episodes" />
             )}
-            {trending.length === 0 && topAnime.length === 0 && (
+            {topAiring.length > 0 && (
+              <AnimeGrid anime={topAiring} title="📺 Top Airing" />
+            )}
+            {mostPopular.length > 0 && (
+              <AnimeGrid anime={mostPopular} title="⭐ Most Popular" />
+            )}
+            {trending.length === 0 && topAiring.length === 0 && (
               <div className="text-center py-20">
                 <p className="text-dark-400 text-lg">Anime data is temporarily unavailable.</p>
                 <p className="text-dark-500 text-sm mt-2">The upstream API may be down. Please try again later.</p>

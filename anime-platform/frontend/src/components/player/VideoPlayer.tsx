@@ -6,20 +6,26 @@ import { motion } from 'framer-motion';
 import {
   Play, Pause, Volume2, VolumeX, Volume1,
   Maximize, Minimize, Loader2, SkipForward, SkipBack,
-  Settings, PictureInPicture2,
+  Settings, PictureInPicture2, Subtitles,
 } from 'lucide-react';
+
+interface Subtitle {
+  url: string;
+  lang: string;
+}
 
 interface VideoPlayerProps {
   src: string;
   poster?: string;
   title?: string;
   headers?: Record<string, string>;
+  subtitles?: Subtitle[];
   onProgress?: (currentTime: number, duration: number) => void;
 }
 
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
-export function VideoPlayer({ src, poster, title, headers, onProgress }: VideoPlayerProps) {
+export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -42,6 +48,8 @@ export function VideoPlayer({ src, poster, title, headers, onProgress }: VideoPl
   const [seekPreview, setSeekPreview] = useState(0);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [hoverX, setHoverX] = useState(0);
+  const [activeSubtitle, setActiveSubtitle] = useState<string | null>(null);
+  const [showSubMenu, setShowSubMenu] = useState(false);
 
   // Initialize video source
   useEffect(() => {
@@ -116,6 +124,45 @@ export function VideoPlayer({ src, poster, title, headers, onProgress }: VideoPl
       }
     };
   }, [src]);
+
+  // Set up subtitle tracks
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !subtitles?.length) return;
+
+    // Remove existing tracks
+    while (video.firstChild) {
+      video.removeChild(video.firstChild);
+    }
+
+    // Find English subtitle by default
+    const engSub = subtitles.find(
+      (s) => s.lang.toLowerCase().includes('english') || s.lang.toLowerCase() === 'en'
+    );
+
+    subtitles.forEach((sub, idx) => {
+      const track = document.createElement('track');
+      track.kind = 'subtitles';
+      track.label = sub.lang;
+      track.srclang = sub.lang.slice(0, 2).toLowerCase();
+      track.src = sub.url;
+      const isDefault = engSub ? sub === engSub : false;
+      if (isDefault) {
+        track.default = true;
+      }
+      video.appendChild(track);
+    });
+
+    // Set track modes after adding to DOM
+    for (let i = 0; i < video.textTracks.length; i++) {
+      const isEng = subtitles[i] && subtitles[i] === engSub;
+      video.textTracks[i].mode = isEng ? 'showing' : 'hidden';
+    }
+
+    if (engSub) {
+      setActiveSubtitle(engSub.lang);
+    }
+  }, [subtitles, src]);
 
   // Video event listeners
   useEffect(() => {
@@ -317,6 +364,16 @@ export function VideoPlayer({ src, poster, title, headers, onProgress }: VideoPl
     } catch {
       // PiP not supported
     }
+  };
+
+  const selectSubtitle = (lang: string | null) => {
+    const video = videoRef.current;
+    if (!video) return;
+    for (let i = 0; i < video.textTracks.length; i++) {
+      video.textTracks[i].mode = video.textTracks[i].label === lang ? 'showing' : 'hidden';
+    }
+    setActiveSubtitle(lang);
+    setShowSubMenu(false);
   };
 
   // Seek bar interaction
@@ -541,7 +598,7 @@ export function VideoPlayer({ src, poster, title, headers, onProgress }: VideoPl
               {/* Speed */}
               <div className="relative">
                 <button
-                  onClick={() => setShowSpeedMenu(!showSpeedMenu)}
+                  onClick={() => { setShowSpeedMenu(!showSpeedMenu); setShowSubMenu(false); }}
                   className="player-btn text-xs font-semibold min-w-[40px]"
                   title="Playback speed"
                 >
@@ -571,6 +628,43 @@ export function VideoPlayer({ src, poster, title, headers, onProgress }: VideoPl
                   </div>
                 )}
               </div>
+
+              {/* Subtitles */}
+              {subtitles && subtitles.length > 0 && (
+                <div className="relative">
+                  <button
+                    onClick={() => { setShowSubMenu(!showSubMenu); setShowSpeedMenu(false); }}
+                    className={`player-btn ${activeSubtitle ? 'text-primary-400' : ''}`}
+                    title="Subtitles"
+                  >
+                    <Subtitles className="w-4 h-4" />
+                  </button>
+                  {showSubMenu && (
+                    <div className="absolute bottom-full right-0 mb-2 bg-dark-900/95 backdrop-blur-md border border-dark-700/50 rounded-lg py-1 shadow-xl min-w-[140px]">
+                      <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-dark-500 font-semibold">Subtitles</div>
+                      <button
+                        onClick={() => selectSubtitle(null)}
+                        className={`w-full px-3 py-1.5 text-left text-sm transition-colors ${
+                          !activeSubtitle ? 'text-primary-400 bg-primary-500/10' : 'text-dark-200 hover:bg-dark-800 hover:text-white'
+                        }`}
+                      >
+                        Off
+                      </button>
+                      {subtitles.map((sub) => (
+                        <button
+                          key={sub.lang}
+                          onClick={() => selectSubtitle(sub.lang)}
+                          className={`w-full px-3 py-1.5 text-left text-sm transition-colors ${
+                            activeSubtitle === sub.lang ? 'text-primary-400 bg-primary-500/10' : 'text-dark-200 hover:bg-dark-800 hover:text-white'
+                          }`}
+                        >
+                          {sub.lang}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* PiP */}
               {typeof document !== 'undefined' && document.pictureInPictureEnabled && (

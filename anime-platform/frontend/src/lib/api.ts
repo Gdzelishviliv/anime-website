@@ -111,6 +111,12 @@ export const animeApi = {
     animeClient.get(`/anime/watch/find-episodes?title=${encodeURIComponent(title)}`),
   watchSources: (episodeId: string, provider?: string) =>
     animeClient.get(`/anime/watch/sources/${encodeURIComponent(episodeId)}${provider ? `?provider=${provider}` : ''}`),
+  // Aniwatch database endpoints
+  watchHome: () => animeClient.get('/anime/watch/home'),
+  watchCategory: (category: string, page = 1) =>
+    animeClient.get(`/anime/watch/category/${encodeURIComponent(category)}?page=${page}`),
+  watchGenre: (genre: string, page = 1) =>
+    animeClient.get(`/anime/watch/genre/${encodeURIComponent(genre)}?page=${page}`),
 };
 
 // ---- User API ----

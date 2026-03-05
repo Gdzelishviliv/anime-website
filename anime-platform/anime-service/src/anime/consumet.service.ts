@@ -118,4 +118,72 @@ export class ConsumetService {
       return { episodes: [], animeId: null, provider: null };
     }
   }
+
+  async getHomePage() {
+    try {
+      const home = await this.scraper.getHomePage();
+      return {
+        spotlightAnimes: home.spotlightAnimes || [],
+        trendingAnimes: home.trendingAnimes || [],
+        latestEpisodeAnimes: home.latestEpisodeAnimes || [],
+        topUpcomingAnimes: home.topUpcomingAnimes || [],
+        top10Animes: home.top10Animes || {},
+        topAiringAnimes: home.topAiringAnimes || [],
+        mostPopularAnimes: home.mostPopularAnimes || [],
+        mostFavoriteAnimes: home.mostFavoriteAnimes || [],
+        latestCompletedAnimes: home.latestCompletedAnimes || [],
+        genres: home.genres || [],
+      };
+    } catch (error) {
+      this.logger.error(`getHomePage failed: ${(error as Error).message}`);
+      return null;
+    }
+  }
+
+  async getCategoryAnime(category: string, page = 1) {
+    try {
+      const result = await this.scraper.getCategoryAnime(category as any, page);
+      return {
+        animes: (result.animes || []).map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          poster: a.poster,
+          duration: a.duration,
+          type: a.type,
+          rating: a.rating,
+          episodes: a.episodes,
+        })),
+        totalPages: result.totalPages,
+        currentPage: result.currentPage,
+        hasNextPage: result.hasNextPage,
+      };
+    } catch (error) {
+      this.logger.error(`getCategoryAnime failed for "${category}": ${(error as Error).message}`);
+      return { animes: [], totalPages: 0, currentPage: 1, hasNextPage: false };
+    }
+  }
+
+  async getGenreAnime(genre: string, page = 1) {
+    try {
+      const result = await this.scraper.getGenreAnime(genre, page);
+      return {
+        animes: (result.animes || []).map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          poster: a.poster,
+          duration: a.duration,
+          type: a.type,
+          rating: a.rating,
+          episodes: a.episodes,
+        })),
+        totalPages: result.totalPages,
+        currentPage: result.currentPage,
+        hasNextPage: result.hasNextPage,
+        genreName: result.genreName,
+      };
+    } catch (error) {
+      this.logger.error(`getGenreAnime failed for "${genre}": ${(error as Error).message}`);
+      return { animes: [], totalPages: 0, currentPage: 1, hasNextPage: false };
+    }
+  }
 }

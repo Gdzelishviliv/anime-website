@@ -9,7 +9,7 @@ export class JwtMiddleware implements NestMiddleware {
   private readonly secret: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.secret = this.configService.get('JWT_SECRET', 'super-secret-jwt-key-change-in-production');
+    this.secret = this.configService.get('JWT_SECRET', 'super-secret');
   }
 
   use(req: Request, res: Response, next: NextFunction) {
