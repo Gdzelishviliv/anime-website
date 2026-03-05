@@ -41,12 +41,28 @@ export class ConsumetService {
   async getEpisodeSources(episodeId: string, provider?: string) {
     const fetcher = provider === 'hianime' ? this.hianime : this.animePahe;
     try {
+      this.logger.log(`Fetching sources for "${episodeId}" with provider "${provider || 'animepahe'}"`);
       const sources = await fetcher.fetchEpisodeSources(episodeId);
-      return sources;
+      if (sources && (sources.sources?.length || sources.download?.length)) {
+        return sources;
+      }
+      this.logger.warn(`No sources from ${provider || 'animepahe'} for "${episodeId}", trying fallback...`);
     } catch (error) {
-      this.logger.error(`fetchEpisodeSources failed for "${episodeId}": ${(error as Error).message}`);
-      return null;
+      this.logger.error(`fetchEpisodeSources failed for "${episodeId}" (${provider || 'animepahe'}): ${(error as Error).message}`);
     }
+
+    // Fallback: try the other provider
+    if (provider !== 'hianime') {
+      try {
+        this.logger.log(`Trying Hianime fallback for "${episodeId}"`);
+        const sources = await this.hianime.fetchEpisodeSources(episodeId);
+        if (sources) return sources;
+      } catch (err) {
+        this.logger.error(`Hianime fallback also failed: ${(err as Error).message}`);
+      }
+    }
+
+    return null;
   }
 
   async findEpisodes(title: string) {
