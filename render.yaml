@@ -7,7 +7,7 @@ services:
     runtime: node
     region: oregon
     rootDir: anime-platform/auth-service
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start:prod
     plan: free
     envVars:
@@ -37,7 +37,7 @@ services:
     runtime: node
     region: oregon
     rootDir: anime-platform/user-service
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start:prod
     plan: free
     envVars:
@@ -61,7 +61,7 @@ services:
     runtime: node
     region: oregon
     rootDir: anime-platform/anime-service
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start:prod
     plan: free
     envVars:
@@ -81,7 +81,7 @@ services:
     runtime: node
     region: oregon
     rootDir: anime-platform/streaming-service
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start:prod
     plan: free
     envVars:
@@ -103,7 +103,7 @@ services:
     runtime: node
     region: oregon
     rootDir: anime-platform/subscription-service
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start:prod
     plan: free
     envVars:
