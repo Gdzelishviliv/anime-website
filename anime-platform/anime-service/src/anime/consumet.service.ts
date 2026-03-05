@@ -1,76 +1,87 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ANIME } from '@consumet/extensions';
+import { HiAnime } from 'aniwatch';
 
 @Injectable()
 export class ConsumetService {
   private readonly logger = new Logger(ConsumetService.name);
-  private animePahe: InstanceType<typeof ANIME.AnimePahe>;
-  private hianime: InstanceType<typeof ANIME.Hianime>;
+  private scraper: InstanceType<typeof HiAnime.Scraper>;
 
   constructor() {
-    this.animePahe = new ANIME.AnimePahe();
-    this.hianime = new ANIME.Hianime();
+    this.scraper = new HiAnime.Scraper();
   }
 
   async searchAnime(query: string) {
-    // Try Hianime first (more reliable for sources), then AnimePahe
     try {
-      const results = await this.hianime.search(query);
-      const hianimeResults = (results.results || []).map((r: any) => ({ ...r, provider: 'hianime' }));
-      if (hianimeResults.length) return hianimeResults;
+      const results = await this.scraper.search(query);
+      return (results.animes || []).map((a: any) => ({
+        id: a.id,
+        title: a.name,
+        image: a.poster,
+        type: a.type,
+        episodes: a.episodes,
+        provider: 'hianime',
+      }));
     } catch (error) {
-      this.logger.warn(`Hianime search failed: ${(error as Error).message}`);
-    }
-
-    try {
-      const results = await this.animePahe.search(query);
-      return results.results || [];
-    } catch (error) {
-      this.logger.error(`AnimePahe search also failed for "${query}": ${(error as Error).message}`);
+      this.logger.error(`Search failed for "${query}": ${(error as Error).message}`);
       return [];
     }
   }
 
-  async getAnimeInfo(animeId: string, provider?: string) {
-    const fetcher = provider === 'hianime' ? this.hianime : this.animePahe;
+  async getAnimeInfo(animeId: string, _provider?: string) {
     try {
-      return await fetcher.fetchAnimeInfo(animeId);
+      const info = await this.scraper.getInfo(animeId);
+      const episodesData = await this.scraper.getEpisodes(animeId);
+      return {
+        id: info.anime?.info?.id,
+        title: info.anime?.info?.name,
+        image: info.anime?.info?.poster,
+        totalEpisodes: episodesData.totalEpisodes,
+        episodes: (episodesData.episodes || []).map((ep: any) => ({
+          id: ep.episodeId,
+          number: ep.number,
+          title: ep.title || `Episode ${ep.number}`,
+          isFiller: ep.isFiller,
+        })),
+      };
     } catch (error) {
-      this.logger.error(`fetchAnimeInfo failed for "${animeId}": ${(error as Error).message}`);
+      this.logger.error(`getAnimeInfo failed for "${animeId}": ${(error as Error).message}`);
       return null;
     }
   }
 
-  async getEpisodeSources(episodeId: string, provider?: string) {
-    // For Hianime, try multiple servers
-    if (provider === 'hianime') {
-      const servers = ['hd-1', 'hd-2', undefined];
-      for (const server of servers) {
+  async getEpisodeSources(episodeId: string, _provider?: string) {
+    // Try servers in order: hd-2 (VidCloud, most reliable), hd-1 (VidStreaming)
+    const servers: Array<'hd-2' | 'hd-1'> = ['hd-2', 'hd-1'];
+    const categories: Array<'sub' | 'dub'> = ['sub', 'dub'];
+
+    for (const server of servers) {
+      for (const category of categories) {
         try {
-          this.logger.log(`Fetching sources for "${episodeId}" with hianime server="${server || 'default'}"`);
-          const sources = await this.hianime.fetchEpisodeSources(episodeId, server as any);
-          this.logger.log(`Hianime result: sourcesCount=${sources?.sources?.length}, downloadCount=${sources?.download?.length}`);
-          if (sources && (sources.sources?.length || sources.download?.length)) {
-            return sources;
+          this.logger.log(`Trying server="${server}" category="${category}" for "${episodeId}"`);
+          const result: any = await this.scraper.getEpisodeSources(episodeId, server, category);
+          if (result?.sources?.length) {
+            this.logger.log(`Got ${result.sources.length} source(s) from ${server}/${category}`);
+            return {
+              sources: result.sources.map((s: any) => ({
+                url: s.url,
+                quality: s.isM3U8 ? 'auto' : 'default',
+                isM3U8: s.isM3U8 || false,
+              })),
+              headers: result.headers || { Referer: 'https://megacloud.blog/' },
+              subtitles: (result.tracks || [])
+                .filter((t: any) => t.lang !== 'thumbnails')
+                .map((t: any) => ({ url: t.url, lang: t.lang })),
+              intro: result.intro,
+              outro: result.outro,
+            };
           }
         } catch (error) {
-          this.logger.warn(`Hianime server "${server || 'default'}" failed: ${(error as Error).message}`);
+          this.logger.warn(`Server ${server}/${category} failed: ${(error as Error).message}`);
         }
       }
-      this.logger.error(`All Hianime servers failed for "${episodeId}"`);
-      return null;
     }
 
-    // AnimePahe
-    try {
-      this.logger.log(`Fetching sources for "${episodeId}" with provider "animepahe"`);
-      const sources = await this.animePahe.fetchEpisodeSources(episodeId);
-      if (sources && (sources.sources?.length || sources.download?.length)) {
-        return sources;
-      }
-    } catch (error) {
-      this.logger.error(`AnimePahe fetchEpisodeSources failed: ${(error as Error).message}`);
-    }
+    this.logger.error(`All servers failed for "${episodeId}"`);
     return null;
   }
 
@@ -82,19 +93,17 @@ export class ConsumetService {
         return { episodes: [], animeId: null, provider: null };
       }
 
-      // Prefer TV results over specials/movies
       const tvMatch = searchResults.find((r: any) => r.type === 'TV');
       const bestMatch = tvMatch || searchResults[0];
-      const provider = bestMatch.provider || 'animepahe';
 
-      const info = await this.getAnimeInfo(bestMatch.id, provider);
-      if (!info || !info.episodes) {
-        return { episodes: [], animeId: bestMatch.id, provider };
+      const info = await this.getAnimeInfo(bestMatch.id);
+      if (!info || !info.episodes?.length) {
+        return { episodes: [], animeId: bestMatch.id, provider: 'hianime' };
       }
 
       return {
         animeId: bestMatch.id,
-        provider,
+        provider: 'hianime',
         title: info.title,
         image: bestMatch.image,
         totalEpisodes: info.totalEpisodes || info.episodes.length,
@@ -102,8 +111,6 @@ export class ConsumetService {
           id: ep.id,
           number: ep.number,
           title: ep.title || `Episode ${ep.number}`,
-          image: ep.image,
-          url: ep.url,
         })),
       };
     } catch (error) {
