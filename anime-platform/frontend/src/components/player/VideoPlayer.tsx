@@ -502,8 +502,8 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
 
       {/* Subtitle Overlay */}
       {currentCueText && (
-        <div className="absolute bottom-16 left-0 right-0 z-10 flex justify-center pointer-events-none px-4">
-          <div className="bg-black/80 text-white text-sm sm:text-base md:text-lg px-4 py-2 rounded-lg max-w-[90%] text-center leading-relaxed">
+        <div className="absolute bottom-4 left-0 right-0 z-10 flex justify-center pointer-events-none px-4">
+          <div className="bg-black/70 text-white text-sm sm:text-base md:text-lg px-4 py-2 rounded-lg max-w-[90%] text-center leading-relaxed">
             {currentCueText.split('\n').map((line, i) => (
               <span key={i}>{line}{i < currentCueText.split('\n').length - 1 && <br />}</span>
             ))}
