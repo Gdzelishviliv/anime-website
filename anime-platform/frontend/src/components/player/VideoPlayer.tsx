@@ -25,12 +25,10 @@ interface VideoPlayerProps {
 
 const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
-// Detect iOS
 const isIOS = () =>
   typeof navigator !== 'undefined' &&
   /iPad|iPhone|iPod/.test(navigator.userAgent);
 
-// Detect Android
 const isAndroid = () =>
   typeof navigator !== 'undefined' &&
   /Android/.test(navigator.userAgent);
@@ -47,6 +45,13 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
   const touchStartTimeRef = useRef<number>(0);
   const lastTapRef = useRef<number>(0);
 
+  // Raw VTT text cache (needed to re-inject native <track> without re-fetching)
+  const vttRawCacheRef = useRef<Map<string, string>>(new Map());
+  // Parsed cue objects cache
+  const subtitleCacheRef = useRef<Map<string, { start: number; end: number; text: string }[]>>(new Map());
+  // Blob URLs for injected <track> elements — revoked on cleanup
+  const trackBlobUrlsRef = useRef<Map<string, string>>(new Map());
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -57,6 +62,8 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
   const [duration, setDuration] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // True only during iOS webkit native fullscreen — React overlays are invisible there
+  const [isIOSFullscreen, setIsIOSFullscreen] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
@@ -67,28 +74,20 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
   const [subtitleCues, setSubtitleCues] = useState<{ start: number; end: number; text: string }[]>([]);
   const [currentCueText, setCurrentCueText] = useState<string>('');
   const [seekFeedback, setSeekFeedback] = useState<{ dir: 'forward' | 'back'; show: boolean }>({ dir: 'forward', show: false });
-  const subtitleCacheRef = useRef<Map<string, { start: number; end: number; text: string }[]>>(new Map());
 
-  // Lock orientation to landscape on fullscreen for mobile
+  // Orientation lock
   const lockOrientation = useCallback(async (lock: boolean) => {
     try {
-      if (lock) {
-        await (screen.orientation as any)?.lock?.('landscape');
-      } else {
-        (screen.orientation as any)?.unlock?.();
-      }
-    } catch {
-      // Not supported — ignore silently
-    }
+      if (lock) await (screen.orientation as any)?.lock?.('landscape');
+      else (screen.orientation as any)?.unlock?.();
+    } catch { /* not supported */ }
   }, []);
 
-  // iOS-specific fullscreen using webkitEnterFullscreen
+  // Fullscreen
   const enterIOSFullscreen = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    if ((video as any).webkitEnterFullscreen) {
-      (video as any).webkitEnterFullscreen();
-    }
+    (video as any).webkitEnterFullscreen?.();
   }, []);
 
   const toggleFullscreen = useCallback(async () => {
@@ -97,7 +96,6 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
     if (!container || !video) return;
 
     if (isIOS()) {
-      // iOS: use webkit API on <video> element
       if ((video as any).webkitDisplayingFullscreen) {
         (video as any).webkitExitFullscreen?.();
       } else {
@@ -111,10 +109,7 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
         await container.requestFullscreen();
         if (isMobile()) await lockOrientation(true);
       } catch {
-        // fallback: try video element
-        try {
-          await (video as any).requestFullscreen?.();
-        } catch { }
+        try { await (video as any).requestFullscreen?.(); } catch { }
       }
     } else {
       await document.exitFullscreen();
@@ -122,7 +117,64 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
     }
   }, [enterIOSFullscreen, lockOrientation]);
 
-  // Initialize video source
+  // Native <track> injection for iOS fullscreen subtitles
+  //
+  // iOS webkitEnterFullscreen() renders the native AVPlayer UI. All React DOM
+  // overlays are completely invisible inside it. The ONLY way to show subtitles
+  // in iOS native fullscreen is via a <track kind="subtitles"> child on <video>.
+  // We create a Blob URL from the VTT text so it works regardless of CORS.
+  const injectNativeTrack = useCallback((vttText: string, lang: string) => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Remove any previously injected tracks
+    Array.from(video.querySelectorAll('track[data-injected]')).forEach(t => t.remove());
+
+    // Revoke old blob URLs to avoid memory leaks
+    trackBlobUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+    trackBlobUrlsRef.current.clear();
+
+    const blob = new Blob([vttText], { type: 'text/vtt' });
+    const blobUrl = URL.createObjectURL(blob);
+    trackBlobUrlsRef.current.set(lang, blobUrl);
+
+    const track = document.createElement('track');
+    track.kind = 'subtitles';
+    track.label = lang;
+    track.srclang = lang.slice(0, 2).toLowerCase();
+    track.src = blobUrl;
+    track.default = true;
+    track.setAttribute('data-injected', 'true');
+    video.appendChild(track);
+
+    // Keep hidden by default — only switched to 'showing' when iOS enters
+    // native fullscreen (handleWebkitBegin). Outside fullscreen our custom
+    // React overlay handles rendering, so the native track must stay hidden.
+    requestAnimationFrame(() => {
+      const tt = Array.from(video.textTracks).find(
+        t => t.label === lang || t.language === lang.slice(0, 2).toLowerCase()
+      );
+      if (tt) tt.mode = 'hidden';
+    });
+  }, []);
+
+  const disableNativeTracks = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    Array.from(video.textTracks).forEach(t => { t.mode = 'disabled'; });
+    Array.from(video.querySelectorAll('track[data-injected]')).forEach(t => t.remove());
+    trackBlobUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+    trackBlobUrlsRef.current.clear();
+  }, []);
+
+  // Revoke blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      trackBlobUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, []);
+
+  // HLS / video source init
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -175,7 +227,6 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
           }
         });
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Safari / iOS native HLS support
         video.src = src;
         video.addEventListener('loadedmetadata', () => setIsLoading(false));
       } else {
@@ -199,7 +250,7 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
     };
   }, [src]);
 
-  // Parse VTT
+  // VTT parser
   const parseVTT = useCallback((vttText: string) => {
     const cues: { start: number; end: number; text: string }[] = [];
     const blocks = vttText.replace(/\r/g, '').split('\n\n');
@@ -228,47 +279,63 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
     return cues;
   }, []);
 
+  // Subtitle track loader
   const loadSubtitleTrack = useCallback(async (lang: string | null) => {
     if (!lang || !subtitles?.length) {
       setSubtitleCues([]);
       setCurrentCueText('');
       setActiveSubtitle(null);
+      disableNativeTracks();
       return;
     }
     const sub = subtitles.find(s => s.lang === lang);
     if (!sub) return;
 
-    if (subtitleCacheRef.current.has(sub.url)) {
-      setSubtitleCues(subtitleCacheRef.current.get(sub.url)!);
-      setActiveSubtitle(lang);
-      return;
+    let vttText: string;
+    if (vttRawCacheRef.current.has(sub.url)) {
+      vttText = vttRawCacheRef.current.get(sub.url)!;
+    } else {
+      try {
+        const res = await fetch(sub.url);
+        vttText = await res.text();
+        vttRawCacheRef.current.set(sub.url, vttText);
+      } catch {
+        setSubtitleCues([]);
+        return;
+      }
     }
 
-    try {
-      const res = await fetch(sub.url);
-      const text = await res.text();
-      const cues = parseVTT(text);
+    let cues = subtitleCacheRef.current.get(sub.url);
+    if (!cues) {
+      cues = parseVTT(vttText);
       subtitleCacheRef.current.set(sub.url, cues);
-      setSubtitleCues(cues);
-      setActiveSubtitle(lang);
-    } catch {
-      setSubtitleCues([]);
     }
-  }, [subtitles, parseVTT]);
 
+    setSubtitleCues(cues);
+    setActiveSubtitle(lang);
+
+    // Always inject native <track> — invisible outside iOS fullscreen
+    // but instantly available when user enters fullscreen (no delay).
+    injectNativeTrack(vttText, lang);
+  }, [subtitles, parseVTT, injectNativeTrack, disableNativeTracks]);
+
+  // Auto-select English subtitle on subtitle list / src change
   useEffect(() => {
     if (!subtitles?.length) {
       setSubtitleCues([]);
       setActiveSubtitle(null);
+      disableNativeTracks();
       return;
     }
+    vttRawCacheRef.current.clear();
     subtitleCacheRef.current.clear();
     const engSub = subtitles.find(
-      (s) => s.lang.toLowerCase().includes('english') || s.lang.toLowerCase() === 'en'
+      s => s.lang.toLowerCase().includes('english') || s.lang.toLowerCase() === 'en'
     );
     if (engSub) loadSubtitleTrack(engSub.lang);
   }, [subtitles, src]);
 
+  // Drive currentCueText from parsed cues
   useEffect(() => {
     if (!subtitleCues.length) { setCurrentCueText(''); return; }
     const video = videoRef.current;
@@ -318,7 +385,7 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
     };
   }, [onProgress, isSeeking]);
 
-  // Fullscreen change listeners — handle both standard and webkit (iOS)
+  // Fullscreen change listeners — handles both standard API and iOS webkit
   useEffect(() => {
     const handleFSChange = () => {
       const isFull = !!(
@@ -329,10 +396,30 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
       if (!isFull && isMobile()) lockOrientation(false);
     };
 
-    // iOS webkit fullscreen events on the video element
     const video = videoRef.current;
-    const handleWebkitBegin = () => setIsFullscreen(true);
-    const handleWebkitEnd = () => setIsFullscreen(false);
+
+    const handleWebkitBegin = () => {
+      setIsFullscreen(true);
+      setIsIOSFullscreen(true);
+      // Ensure the injected track is actively showing inside the native player
+      if (video) {
+        Array.from(video.textTracks).forEach(t => {
+          if (t.mode !== 'disabled') t.mode = 'showing';
+        });
+      }
+    };
+
+    const handleWebkitEnd = () => {
+      setIsFullscreen(false);
+      setIsIOSFullscreen(false);
+      // Switch from 'showing' to 'hidden' so the native track renderer stops
+      // drawing on top of our custom React subtitle overlay
+      if (video) {
+        Array.from(video.textTracks).forEach(t => {
+          if (t.mode === 'showing') t.mode = 'hidden';
+        });
+      }
+    };
 
     document.addEventListener('fullscreenchange', handleFSChange);
     document.addEventListener('webkitfullscreenchange', handleFSChange);
@@ -394,7 +481,7 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [toggleFullscreen]);
 
-  // Auto-hide controls
+  // Controls auto-hide
   const flashControls = useCallback(() => {
     setShowControls(true);
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
@@ -407,6 +494,7 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
     }, 3000);
   }, []);
 
+  // Playback controls
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -460,38 +548,29 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
   };
 
   const selectSubtitle = (lang: string | null) => {
+    if (!lang) disableNativeTracks();
     loadSubtitleTrack(lang);
     setShowSubMenu(false);
   };
 
-  // Touch handling for mobile
+  // Touch handling
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartXRef.current = e.touches[0].clientX;
     touchStartTimeRef.current = videoRef.current?.currentTime ?? 0;
 
-    // Double tap detection
     const now = Date.now();
     if (now - lastTapRef.current < 300) {
-      // Double tap
       const container = containerRef.current;
       if (!container) return;
       const rect = container.getBoundingClientRect();
       const tapX = e.touches[0].clientX - rect.left;
-      if (tapX < rect.width / 2) {
-        skip(-10);
-      } else {
-        skip(10);
-      }
+      if (tapX < rect.width / 2) { skip(-10); } else { skip(10); }
       lastTapRef.current = 0;
     } else {
       lastTapRef.current = now;
-      // Single tap toggles controls
       if (showControls) {
-        // If controls visible, hide on tap (but not on control elements)
         if (!(e.target as HTMLElement).closest('[data-controls]')) {
-          if (isPlaying) {
-            setShowControls(false);
-          }
+          if (isPlaying) setShowControls(false);
         }
       } else {
         flashControls();
@@ -499,12 +578,10 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
     }
   }, [showControls, isPlaying, skip, flashControls]);
 
-  // Touch seek on seek bar
   const handleSeekTouch = (e: React.TouchEvent) => {
     const bar = seekBarRef.current;
     if (!bar) return;
     const rect = bar.getBoundingClientRect();
-
     const getTime = (touch: { clientX: number }) =>
       Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width)) * (duration || 0);
 
@@ -520,7 +597,6 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
     }
   };
 
-  // Mouse seek on seek bar
   const handleSeekBarMouse = (e: React.MouseEvent, action: 'down' | 'move') => {
     const bar = seekBarRef.current;
     if (!bar) return;
@@ -531,7 +607,6 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
     if (action === 'down') {
       setIsSeeking(true);
       setProgress(time);
-
       const handleMouseMove = (ev: MouseEvent) => {
         const mx = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
         setProgress(mx * (duration || 0));
@@ -556,26 +631,20 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
     const hours = Math.floor(time / 3600);
     const minutes = Math.floor((time % 3600) / 60);
     const seconds = Math.floor(time % 60);
-    if (hours > 0) {
+    if (hours > 0)
       return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
   const progressPercent = duration ? (progress / duration) * 100 : 0;
   const bufferedPercent = duration ? (buffered / duration) * 100 : 0;
-
   const VolumeIcon = isMuted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 
   return (
     <div
       ref={containerRef}
       className="player-container group"
-      style={{
-        // Critical for iOS fullscreen + safe area support
-        WebkitUserSelect: 'none',
-        userSelect: 'none',
-      }}
+      style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
       onMouseMove={!isMobile() ? flashControls : undefined}
       onMouseLeave={!isMobile() ? () => {
         if (isPlaying && !isSeeking) {
@@ -599,12 +668,14 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
         className="absolute inset-0 w-full h-full object-contain"
         style={{ cursor: isMobile() ? 'default' : 'pointer' }}
         playsInline
-        // iOS inline playback (prevents auto-fullscreen on play)
         webkit-playsinline="true"
       />
 
-      {/* Subtitle Overlay */}
-      {currentCueText && (
+      {/* Subtitle Overlay
+          Hidden when isIOSFullscreen=true because the native AVPlayer renders
+          our injected <track> element in that context. Showing both would
+          duplicate the subtitles. */}
+      {currentCueText && !isIOSFullscreen && (
         <div
           className="absolute left-0 right-0 z-10 flex justify-center pointer-events-none px-4"
           style={{
@@ -668,8 +739,7 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0 }}
-            className={`absolute top-1/2 -translate-y-1/2 pointer-events-none z-20 flex flex-col items-center gap-1 ${seekFeedback.dir === 'forward' ? 'right-8' : 'left-8'
-              }`}
+            className={`absolute top-1/2 -translate-y-1/2 pointer-events-none z-20 flex flex-col items-center gap-1 ${seekFeedback.dir === 'forward' ? 'right-8' : 'left-8'}`}
           >
             <div className="bg-white/20 backdrop-blur-sm rounded-full px-4 py-2 text-white font-semibold text-sm">
               {seekFeedback.dir === 'forward' ? '+10s' : '-10s'}
@@ -681,29 +751,24 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
       {/* Controls overlay */}
       <div
         data-controls
-        className={`absolute bottom-0 left-0 right-0 z-20 transition-all duration-300 ${showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'
-          }`}
-        // Prevent touch from propagating to video (which might hide controls)
+        className={`absolute bottom-0 left-0 right-0 z-20 transition-all duration-300 ${showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}`}
         onTouchStart={e => e.stopPropagation()}
       >
-        {/* Gradient backdrop */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent pointer-events-none" />
 
         <div
           className="relative px-4 pb-4 pt-12"
           style={{
-            // Respect safe-area-inset for notched phones
             paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
             paddingLeft: 'max(16px, env(safe-area-inset-left))',
             paddingRight: 'max(16px, env(safe-area-inset-right))',
           }}
         >
-          {/* Title */}
           {title && (
             <p className="text-white/90 text-sm font-medium mb-3 drop-shadow-lg truncate">{title}</p>
           )}
 
-          {/* Seek Bar — larger touch target on mobile */}
+          {/* Seek Bar */}
           <div
             ref={seekBarRef}
             className="group/seek relative flex items-center cursor-pointer mb-3"
@@ -715,7 +780,6 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
             onTouchMove={isMobile() ? handleSeekTouch : undefined}
             onTouchEnd={isMobile() ? handleSeekTouch : undefined}
           >
-            {/* Hover tooltip (desktop only) */}
             {hoverTime !== null && !isSeeking && !isMobile() && (
               <div
                 className="absolute -top-8 px-2 py-1 bg-dark-900/95 rounded text-xs text-white font-medium pointer-events-none border border-dark-700/50 shadow-lg"
@@ -724,17 +788,10 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
                 {formatTime(hoverTime)}
               </div>
             )}
-
-            {/* Track */}
-            <div
-              className="absolute left-0 right-0 rounded-full overflow-hidden bg-white/20"
-              style={{ height: isMobile() ? '4px' : '4px', transition: 'height 0.15s' }}
-            >
+            <div className="absolute left-0 right-0 rounded-full overflow-hidden bg-white/20" style={{ height: '4px' }}>
               <div className="absolute inset-y-0 left-0 bg-white/30 rounded-full" style={{ width: `${bufferedPercent}%` }} />
               <div className="absolute inset-y-0 left-0 bg-primary-500 rounded-full" style={{ width: `${progressPercent}%` }} />
             </div>
-
-            {/* Thumb — bigger on mobile */}
             <div
               className="absolute top-1/2 -translate-y-1/2 bg-primary-400 rounded-full shadow-lg shadow-primary-500/50 pointer-events-none"
               style={{
@@ -748,35 +805,17 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
 
           {/* Controls Row */}
           <div className="flex items-center justify-between gap-2">
-            {/* Left Controls */}
             <div className="flex items-center gap-1">
-              <button
-                onClick={togglePlay}
-                className="player-btn"
-                style={{ touchAction: 'manipulation' }}
-              >
-                {isPlaying
-                  ? <Pause className="w-5 h-5" fill="white" />
-                  : <Play className="w-5 h-5 ml-0.5" fill="white" />}
+              <button onClick={togglePlay} className="player-btn" style={{ touchAction: 'manipulation' }}>
+                {isPlaying ? <Pause className="w-5 h-5" fill="white" /> : <Play className="w-5 h-5 ml-0.5" fill="white" />}
               </button>
-
-              <button
-                onClick={() => skip(-10)}
-                className="player-btn"
-                style={{ touchAction: 'manipulation' }}
-              >
+              <button onClick={() => skip(-10)} className="player-btn" style={{ touchAction: 'manipulation' }}>
                 <SkipBack className="w-4 h-4" />
               </button>
-
-              <button
-                onClick={() => skip(10)}
-                className="player-btn"
-                style={{ touchAction: 'manipulation' }}
-              >
+              <button onClick={() => skip(10)} className="player-btn" style={{ touchAction: 'manipulation' }}>
                 <SkipForward className="w-4 h-4" />
               </button>
 
-              {/* Volume — hide slider on mobile (use system volume) */}
               {!isMobile() && (
                 <div className="flex items-center group/vol">
                   <button onClick={toggleMute} className="player-btn">
@@ -784,10 +823,7 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
                   </button>
                   <div className="w-0 group-hover/vol:w-20 overflow-hidden transition-all duration-200 flex items-center">
                     <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.05}
+                      type="range" min={0} max={1} step={0.05}
                       value={isMuted ? 0 : volume}
                       onChange={(e) => setVolumeLevel(parseFloat(e.target.value))}
                       className="player-volume-slider w-full"
@@ -795,15 +831,12 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
                   </div>
                 </div>
               )}
-
-              {/* Mute icon only on mobile */}
               {isMobile() && (
                 <button onClick={toggleMute} className="player-btn" style={{ touchAction: 'manipulation' }}>
                   <VolumeIcon className="w-5 h-5" />
                 </button>
               )}
 
-              {/* Time */}
               <span className="text-white/70 text-xs font-mono ml-1 select-none whitespace-nowrap">
                 {formatTime(progress)}
                 <span className="text-white/40 mx-1">/</span>
@@ -811,7 +844,6 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
               </span>
             </div>
 
-            {/* Right Controls */}
             <div className="flex items-center gap-1">
               {/* Speed */}
               <div className="relative">
@@ -829,10 +861,7 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
                       <button
                         key={speed}
                         onClick={() => changeSpeed(speed)}
-                        className={`w-full px-3 py-2 text-left text-sm transition-colors flex items-center justify-between ${playbackSpeed === speed
-                            ? 'text-primary-400 bg-primary-500/10'
-                            : 'text-dark-200 hover:bg-dark-800 hover:text-white'
-                          }`}
+                        className={`w-full px-3 py-2 text-left text-sm transition-colors flex items-center justify-between ${playbackSpeed === speed ? 'text-primary-400 bg-primary-500/10' : 'text-dark-200 hover:bg-dark-800 hover:text-white'}`}
                         style={{ touchAction: 'manipulation' }}
                       >
                         <span>{speed}x</span>
@@ -858,8 +887,7 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
                       <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-dark-500 font-semibold">Subtitles</div>
                       <button
                         onClick={() => selectSubtitle(null)}
-                        className={`w-full px-3 py-2 text-left text-sm transition-colors ${!activeSubtitle ? 'text-primary-400 bg-primary-500/10' : 'text-dark-200 hover:bg-dark-800 hover:text-white'
-                          }`}
+                        className={`w-full px-3 py-2 text-left text-sm transition-colors ${!activeSubtitle ? 'text-primary-400 bg-primary-500/10' : 'text-dark-200 hover:bg-dark-800 hover:text-white'}`}
                         style={{ touchAction: 'manipulation' }}
                       >
                         Off
@@ -868,8 +896,7 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
                         <button
                           key={sub.lang}
                           onClick={() => selectSubtitle(sub.lang)}
-                          className={`w-full px-3 py-2 text-left text-sm transition-colors ${activeSubtitle === sub.lang ? 'text-primary-400 bg-primary-500/10' : 'text-dark-200 hover:bg-dark-800 hover:text-white'
-                            }`}
+                          className={`w-full px-3 py-2 text-left text-sm transition-colors ${activeSubtitle === sub.lang ? 'text-primary-400 bg-primary-500/10' : 'text-dark-200 hover:bg-dark-800 hover:text-white'}`}
                           style={{ touchAction: 'manipulation' }}
                         >
                           {sub.lang}
@@ -880,7 +907,7 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
                 </div>
               )}
 
-              {/* PiP — hide on mobile where it's not well supported */}
+              {/* PiP — desktop only */}
               {!isMobile() && typeof document !== 'undefined' && document.pictureInPictureEnabled && (
                 <button onClick={togglePiP} className="player-btn">
                   <PictureInPicture2 className="w-4 h-4" />
@@ -888,21 +915,15 @@ export function VideoPlayer({ src, poster, title, headers, subtitles, onProgress
               )}
 
               {/* Fullscreen */}
-              <button
-                onClick={toggleFullscreen}
-                className="player-btn"
-                style={{ touchAction: 'manipulation' }}
-              >
-                {isFullscreen
-                  ? <Minimize className="w-5 h-5" />
-                  : <Maximize className="w-5 h-5" />}
+              <button onClick={toggleFullscreen} className="player-btn" style={{ touchAction: 'manipulation' }}>
+                {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Keyboard hint (desktop only) */}
+      {/* Keyboard hints — desktop only */}
       {!isMobile() && showControls && !isPlaying && !error && !isLoading && (
         <div className="absolute top-4 right-4 z-10">
           <div className="flex gap-2 text-[10px] text-white/30">
