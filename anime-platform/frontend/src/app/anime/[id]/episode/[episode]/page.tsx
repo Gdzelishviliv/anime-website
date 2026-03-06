@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, List, AlertTriangle, Play, Home, Tv } from 'lucide-react';
-import { animeApi, streamingApi } from '@/lib/api';
+import { animeApi, userApi } from '@/lib/api';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { LoadingSpinner } from '@/components/ui/Loading';
 import { ErrorDisplay } from '@/components/ui/ErrorDisplay';
@@ -161,7 +161,7 @@ export default function EpisodePage() {
       if (Math.floor(currentTime) % 30 !== 0) return;
       if (!isAuthenticated || !user) return;
 
-      streamingApi.reportWatchEvent({
+      userApi.updateWatchProgress({
         animeId,
         episodeId: episodeNumber,
         animeTitle: anime?.title,

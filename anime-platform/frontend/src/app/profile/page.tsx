@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { User, Clock, Heart, Play, LogOut, Crown } from 'lucide-react';
+import { User, Clock, Heart, Play, LogOut, Crown, X } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { userApi, subscriptionApi } from '@/lib/api';
 import { AnimeCard } from '@/components/anime/AnimeCard';
@@ -21,6 +21,7 @@ export default function ProfilePage() {
   const [subscription, setSubscription] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'history' | 'favorites'>('history');
+  console.log('Profile data:', { profile, watchHistory, continueWatching, favorites, subscription });
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -49,6 +50,15 @@ export default function ProfilePage() {
       console.error('Failed to load profile data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRemoveFavorite = async (animeId: number) => {
+    try {
+      await userApi.removeFavorite(animeId);
+      setFavorites((prev) => prev.filter((f) => f.animeId !== animeId));
+    } catch (err) {
+      console.error('Failed to remove favorite:', err);
     }
   };
 
@@ -130,12 +140,26 @@ export default function ProfilePage() {
                   className="card p-4 hover:border-primary-500/50 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-16 h-16 bg-dark-700 rounded-lg flex items-center justify-center">
-                      <Play className="w-6 h-6 text-primary-400" />
+                    <div className="w-16 h-20 relative rounded-lg overflow-hidden flex-shrink-0 bg-dark-700">
+                      {item.thumbnailUrl ? (
+                        <Image
+                          src={item.thumbnailUrl}
+                          alt={item.animeTitle || 'Anime'}
+                          fill
+                          className="object-cover"
+                          sizes="64px"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Play className="w-6 h-6 text-primary-400" />
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-white font-medium truncate">Anime #{item.animeId}</p>
-                      <p className="text-dark-400 text-sm">Episode {item.episodeId}</p>
+                      <p className="text-white font-medium truncate">{item.animeTitle || `Anime #${item.animeId}`}</p>
+                      <p className="text-dark-400 text-sm">
+                        {item.episodeTitle || `Episode ${item.episodeId}`}
+                      </p>
                       <div className="mt-1.5 w-full bg-dark-700 rounded-full h-1.5">
                         <div
                           className="bg-primary-500 h-1.5 rounded-full"
@@ -203,17 +227,29 @@ export default function ProfilePage() {
                       href={`/anime/${item.animeId}/episode/${item.episodeId}`}
                       className="card p-4 flex items-center gap-4 hover:border-dark-600 transition-colors"
                     >
-                      <div className="w-12 h-12 bg-dark-700 rounded flex items-center justify-center">
-                        <Play className="w-5 h-5 text-dark-400" />
+                      <div className="w-12 h-16 relative rounded overflow-hidden flex-shrink-0 bg-dark-700">
+                        {item.thumbnailUrl ? (
+                          <Image
+                            src={item.thumbnailUrl}
+                            alt={item.animeTitle || 'Anime'}
+                            fill
+                            className="object-cover"
+                            sizes="48px"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Play className="w-5 h-5 text-dark-400" />
+                          </div>
+                        )}
                       </div>
-                      <div className="flex-1">
-                        <p className="text-white font-medium">Anime #{item.animeId}</p>
-                        <p className="text-dark-400 text-sm">
-                          Episode {item.episodeId} • {Math.floor(item.progressSeconds / 60)}m watched
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-medium truncate">{item.animeTitle || `Anime #${item.animeId}`}</p>
+                        <p className="text-dark-400 text-sm truncate">
+                          {item.episodeTitle || `Episode ${item.episodeId}`} • {Math.floor(item.progressSeconds / 60)}m watched
                           {item.completed && ' • Completed'}
                         </p>
                       </div>
-                      <span className="text-dark-500 text-xs">
+                      <span className="text-dark-500 text-xs flex-shrink-0">
                         {new Date(item.updatedAt).toLocaleDateString()}
                       </span>
                     </Link>
@@ -234,14 +270,29 @@ export default function ProfilePage() {
                   </Link>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                  {favorites.map((fav: any) => (
-                    <Link key={fav.id} href={`/anime/${fav.animeId}`}>
-                      <div className="card p-3 text-center hover:border-primary-500/50 transition-colors">
-                        <Heart className="w-6 h-6 text-red-400 mx-auto mb-2" />
-                        <p className="text-white text-sm">Anime #{fav.animeId}</p>
-                      </div>
-                    </Link>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                  {favorites.map((fav: any, i: number) => (
+                    <div key={fav.id} className="relative group/fav">
+                      <AnimeCard
+                        anime={{
+                          malId: fav.animeId,
+                          title: fav.animeTitle || `Anime #${fav.animeId}`,
+                          imageUrl: fav.thumbnailUrl,
+                        }}
+                        index={i}
+                      />
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleRemoveFavorite(fav.animeId);
+                        }}
+                        className="absolute top-2 right-2 z-10 bg-dark-900/80 backdrop-blur-sm rounded-full p-1.5 opacity-0 group-hover/fav:opacity-100 transition-opacity hover:bg-red-500/80"
+                        title="Remove from favorites"
+                      >
+                        <X className="w-4 h-4 text-white" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}

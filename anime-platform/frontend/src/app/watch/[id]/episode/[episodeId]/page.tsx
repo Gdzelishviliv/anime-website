@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, List, Play, Home } from 'lucide-react';
-import { animeApi } from '@/lib/api';
+import { animeApi, userApi } from '@/lib/api';
+import { useAuthStore } from '@/store/auth.store';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { LoadingSpinner } from '@/components/ui/Loading';
 import { ErrorDisplay } from '@/components/ui/ErrorDisplay';
@@ -26,6 +27,7 @@ export default function WatchEpisodePage() {
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showEpisodeList, setShowEpisodeList] = useState(false);
+  const { isAuthenticated, user } = useAuthStore();
 
   // Get anime info (episodes list)
   const fetchAnimeInfo = async () => {
@@ -91,6 +93,24 @@ export default function WatchEpisodePage() {
   useEffect(() => {
     if (episodeId) fetchSource();
   }, [episodeId]);
+
+  const handleProgress = useCallback(
+    (currentTime: number, duration: number) => {
+      if (Math.floor(currentTime) % 30 !== 0) return;
+      if (!isAuthenticated || !user) return;
+
+      userApi.updateWatchProgress({
+        animeId: animeInfo?.malId || 0,
+        episodeId: animeInfo?.episodes?.find((ep: any) => ep.id === episodeId)?.number || 0,
+        animeTitle: animeInfo?.title,
+        episodeTitle: animeInfo?.episodes?.find((ep: any) => ep.id === episodeId)?.title || `Episode`,
+        thumbnailUrl: animeInfo?.image,
+        progressSeconds: currentTime,
+        totalDurationSeconds: duration,
+      }).catch(() => {});
+    },
+    [isAuthenticated, user, animeInfo, episodeId],
+  );
 
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorDisplay message={error} onRetry={fetchAnimeInfo} />;
@@ -163,6 +183,7 @@ export default function WatchEpisodePage() {
               <VideoPlayer
                 src={streamUrl}
                 subtitles={subtitles}
+                onProgress={handleProgress}
               />
             ) : (
               <div className="aspect-video bg-dark-900 flex items-center justify-center text-dark-400">
