@@ -10,7 +10,8 @@ import { LoadingSpinner } from '@/components/ui/Loading';
 
 const plans = [
   {
-    name: 'FREE',
+    name: 'free',
+    label: 'FREE',
     price: '$0',
     period: 'forever',
     color: 'from-dark-700 to-dark-800',
@@ -24,7 +25,8 @@ const plans = [
     limitations: ['No downloads', 'Limited quality'],
   },
   {
-    name: 'BASIC',
+    name: 'basic',
+    label: 'BASIC',
     price: '$7.99',
     period: '/month',
     color: 'from-blue-900/40 to-dark-800',
@@ -39,7 +41,8 @@ const plans = [
     limitations: ['No downloads'],
   },
   {
-    name: 'PREMIUM',
+    name: 'premium',
+    label: 'PREMIUM',
     price: '$14.99',
     period: '/month',
     color: 'from-yellow-900/30 to-dark-800',
@@ -60,7 +63,7 @@ const plans = [
 export default function SubscriptionPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
-  const [currentPlan, setCurrentPlan] = useState<string>('FREE');
+  const [currentPlan, setCurrentPlan] = useState<string>('free');
   const [loading, setLoading] = useState(true);
   const [activating, setActivating] = useState<string | null>(null);
 
@@ -75,7 +78,7 @@ export default function SubscriptionPage() {
   const loadSubscription = async () => {
     try {
       const res = await subscriptionApi.getCurrent();
-      setCurrentPlan(res.data.plan || 'FREE');
+      setCurrentPlan(res.data.plan || 'free');
     } catch (err) {
       // Default to FREE if service unavailable
     } finally {
@@ -141,7 +144,7 @@ export default function SubscriptionPage() {
                 )}
 
                 <div className="text-center mb-6 pt-2">
-                  <h3 className="text-lg font-bold text-white mb-1">{plan.name}</h3>
+                  <h3 className="text-lg font-bold text-white mb-1">{plan.label}</h3>
                   <div className="flex items-baseline justify-center gap-1">
                     <span className="text-3xl font-bold text-white">{plan.price}</span>
                     <span className="text-dark-400 text-sm">{plan.period}</span>
@@ -171,7 +174,7 @@ export default function SubscriptionPage() {
                   ) : isCurrentPlan ? (
                     'Current Plan'
                   ) : (
-                    `Select ${plan.name}`
+                    `Select ${plan.label}`
                   )}
                 </button>
               </motion.div>
