@@ -11,6 +11,7 @@ import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { LoadingSpinner } from '@/components/ui/Loading';
 import { ErrorDisplay } from '@/components/ui/ErrorDisplay';
 import { useAuthStore } from '@/store/auth.store';
+import { RelatedSeasons, AiringSchedule, useAnimeRelations } from '@/components/anime/RelatedSeasons';
 
 export default function EpisodePage() {
   const params = useParams();
@@ -173,6 +174,8 @@ export default function EpisodePage() {
     [isAuthenticated, user, animeId, episodeNumber, anime, episodes],
   );
 
+  const { data: relationsData } = useAnimeRelations(animeId);
+
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorDisplay message={error} onRetry={fetchData} />;
 
@@ -302,6 +305,9 @@ export default function EpisodePage() {
                 )}
               </div>
             </motion.div>
+
+            {/* Airing Schedule */}
+            <AiringSchedule data={relationsData} />
           </div>
 
           {/* Side Panel — Episode List */}
@@ -364,6 +370,9 @@ export default function EpisodePage() {
               </div>
             </motion.div>
           )}
+
+          {/* Related Seasons */}
+          <RelatedSeasons data={relationsData} />
         </div>
       </div>
     </div>

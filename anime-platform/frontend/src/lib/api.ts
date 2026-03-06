@@ -102,6 +102,8 @@ export const animeApi = {
   getSeasonNow: (page = 1) => animeClient.get(`/anime/season/now?page=${page}`),
   getRecommendations: (id: number) =>
     animeClient.get(`/anime/${id}/recommendations`),
+  getRelations: (id: number) =>
+    animeClient.get(`/anime/${id}/relations`),
   // Watch / streaming source endpoints (Consumet)
   watchSearch: (query: string) =>
     animeClient.get(`/anime/watch/search?q=${encodeURIComponent(query)}`),

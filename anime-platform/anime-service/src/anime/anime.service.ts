@@ -135,6 +135,33 @@ export class AnimeService {
     return result;
   }
 
+  async getAnimeRelations(id: number) {
+    const cacheKey = `anime:${id}:relations`;
+    const cached = await this.redisService.getJSON<any>(cacheKey);
+    if (cached) return cached;
+
+    const anime = await this.jikanService.getAnimeById(id);
+    if (!anime) throw new NotFoundException('Anime not found');
+
+    const result = {
+      relations: (anime.relations || [])
+        .map((r: any) => ({
+          relation: r.relation,
+          entry: (r.entry || [])
+            .filter((e: any) => e.type === 'anime')
+            .map((e: any) => ({ mal_id: e.mal_id, name: e.name })),
+        }))
+        .filter((r: any) => r.entry.length > 0),
+      status: anime.status,
+      broadcast: anime.broadcast,
+      airing: anime.airing,
+      aired: anime.aired,
+    };
+
+    await this.redisService.setJSON(cacheKey, result, this.CACHE_TTL);
+    return result;
+  }
+
   private async cacheAnime(anime: any): Promise<AnimeCache> {
     const mapped = this.jikanService.mapToCache(anime);
     try {

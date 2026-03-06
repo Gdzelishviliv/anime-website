@@ -248,6 +248,12 @@ export class AnimeController {
     }
   }
 
+  @Get(':id/relations')
+  @ApiOperation({ summary: 'Get anime relations (sequels, prequels, etc.) and airing info' })
+  async getRelations(@Param('id', ParseIntPipe) id: number) {
+    return { data: await this.animeService.getAnimeRelations(id) };
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get anime by MAL ID' })
   async getById(@Param('id', ParseIntPipe) id: number) {

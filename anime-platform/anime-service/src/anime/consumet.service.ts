@@ -31,10 +31,15 @@ export class ConsumetService {
     try {
       const info = await this.scraper.getInfo(animeId);
       const episodesData = await this.scraper.getEpisodes(animeId);
+      const anime = info.anime;
       return {
-        id: info.anime?.info?.id,
-        title: info.anime?.info?.name,
-        image: info.anime?.info?.poster,
+        id: anime?.info?.id,
+        malId: anime?.info?.malId,
+        title: anime?.info?.name,
+        image: anime?.info?.poster,
+        description: anime?.info?.description,
+        stats: anime?.info?.stats,
+        moreInfo: anime?.moreInfo,
         totalEpisodes: episodesData.totalEpisodes,
         episodes: (episodesData.episodes || []).map((ep: any) => ({
           id: ep.episodeId,
@@ -42,6 +47,11 @@ export class ConsumetService {
           title: ep.title || `Episode ${ep.number}`,
           isFiller: ep.isFiller,
         })),
+        seasons: ((info as any).seasons || []).map((s: any) => ({
+          ...s,
+          poster: s.poster?.replace('/thumbnail/100x200/', '/thumbnail/300x400/'),
+        })),
+        relatedAnimes: (info as any).relatedAnimes || [],
       };
     } catch (error) {
       this.logger.error(`getAnimeInfo failed for "${animeId}": ${(error as Error).message}`);
