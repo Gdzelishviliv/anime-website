@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, List, Play, Home } from 'lucide-react';
@@ -12,8 +12,11 @@ import { ErrorDisplay } from '@/components/ui/ErrorDisplay';
 
 export default function WatchEpisodePage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const animeId = params.id as string;
-  const episodeId = params.episodeId as string;
+  const rawEpisodeId = params.episodeId as string;
+  const epParam = searchParams.get('ep');
+  const episodeId = epParam ? `${rawEpisodeId}?ep=${epParam}` : rawEpisodeId;
 
   const [animeInfo, setAnimeInfo] = useState<any>(null);
   const [streamUrl, setStreamUrl] = useState('');
