@@ -45,18 +45,26 @@ export default function EpisodePage() {
       const episodesRes = await animeApi.getEpisodes(animeId);
       setEpisodes(episodesRes.data?.data || []);
 
-      // Search for streaming episodes by title
-      const title = animeData?.title || animeData?.title_english;
-      if (title) {
+      // Search for streaming episodes by title — try multiple title variants
+      const titles = [
+        animeData?.title,
+        animeData?.title_english,
+        animeData?.title_japanese,
+      ].filter(Boolean);
+
+      let foundMatch = false;
+      for (const t of titles) {
+        if (foundMatch) break;
         try {
-          const findRes = await animeApi.findEpisodes(title);
+          const findRes = await animeApi.findEpisodes(t);
           const found = findRes.data?.data;
           if (found?.episodes?.length) {
             setConsumetEpisodes(found.episodes);
             setProvider(found.provider || undefined);
+            foundMatch = true;
           }
         } catch {
-          // Consumet search failed — will be handled when trying to get sources
+          // Try next title variant
         }
       }
     } catch (err: any) {
@@ -73,9 +81,9 @@ export default function EpisodePage() {
     setSourceLoading(true);
     setSourceError(null);
 
-    // Find the episode matching the current episode number
-    const epIndex = episodeNumber - 1;
-    const episode = consumetEpisodes[epIndex];
+    // Find the episode matching the current episode number by its number field
+    const episode = consumetEpisodes.find((ep: any) => ep.number === episodeNumber)
+      || consumetEpisodes[episodeNumber - 1]; // fallback to index if number field doesn't match
 
     if (!episode) {
       setSourceError(`Episode ${episodeNumber} not found in streaming sources`);

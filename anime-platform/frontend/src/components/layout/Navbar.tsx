@@ -81,9 +81,10 @@ export function Navbar() {
       <nav
         className={cn(
           'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
+          'border-b',
           scrolled
-            ? 'bg-dark-950/95 backdrop-blur-xl shadow-lg shadow-black/20 border-b border-white/[0.06]'
-            : 'bg-gradient-to-b from-dark-950/80 to-transparent',
+            ? 'bg-dark-950/95 backdrop-blur-xl shadow-lg shadow-black/20 border-white/[0.06]'
+            : 'bg-gradient-to-b from-dark-950/80 to-transparent border-transparent',
         )}
       >
         <div className="mx-auto px-3 sm:px-4 md:px-6 lg:px-8 max-w-7xl">
@@ -150,7 +151,7 @@ export function Navbar() {
                   className="relative"
                 >
                   <Search className={cn(
-                    'absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200',
+                    'absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 z-10 pointer-events-none transition-colors duration-200',
                     searchFocused ? 'text-primary-400' : 'text-dark-500',
                   )} />
                   <input
@@ -164,7 +165,7 @@ export function Navbar() {
                       'w-full bg-dark-800/60 backdrop-blur-sm rounded-full pl-10 pr-4 py-2 text-sm text-dark-100 placeholder-dark-500 transition-all duration-200 outline-none',
                       searchFocused
                         ? 'border border-primary-500/40 ring-2 ring-primary-500/10 bg-dark-800/80'
-                        : 'border border-white/[0.06] hover:border-white/[0.1]',
+                        : 'border border-white/[0.06] hover:border-white/[0.1]',  
                     )}
                   />
                 </motion.div>

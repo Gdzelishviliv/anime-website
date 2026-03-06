@@ -85,6 +85,32 @@ export class ConsumetService {
     return null;
   }
 
+  /**
+   * Normalize a title string for comparison: lowercase, strip punctuation/extra spaces.
+   */
+  private normalizeTitle(title: string): string {
+    return title
+      .toLowerCase()
+      .replace(/[^\w\s]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /**
+   * Compute a simple word-overlap similarity score between two titles (0-1).
+   */
+  private titleSimilarity(a: string, b: string): number {
+    const na = this.normalizeTitle(a);
+    const nb = this.normalizeTitle(b);
+    if (na === nb) return 1;
+
+    const wordsA = new Set(na.split(' '));
+    const wordsB = new Set(nb.split(' '));
+    const intersection = [...wordsA].filter((w) => wordsB.has(w)).length;
+    const union = new Set([...wordsA, ...wordsB]).size;
+    return union === 0 ? 0 : intersection / union;
+  }
+
   async findEpisodes(title: string) {
     try {
       const searchResults = await this.searchAnime(title);
@@ -93,8 +119,25 @@ export class ConsumetService {
         return { episodes: [], animeId: null, provider: null };
       }
 
-      const tvMatch = searchResults.find((r: any) => r.type === 'TV');
-      const bestMatch = tvMatch || searchResults[0];
+      // Score each result by title similarity, preferring TV type
+      const scored = searchResults.map((r: any) => {
+        let score = this.titleSimilarity(title, r.title);
+        // Boost exact normalized match
+        if (this.normalizeTitle(title) === this.normalizeTitle(r.title)) {
+          score = 2;
+        }
+        // Small boost for TV type
+        if (r.type === 'TV') score += 0.1;
+        return { ...r, score };
+      });
+
+      // Sort by score descending
+      scored.sort((a, b) => b.score - a.score);
+      const bestMatch = scored[0];
+
+      this.logger.log(
+        `findEpisodes: query="${title}" -> matched "${bestMatch.title}" (id=${bestMatch.id}, score=${bestMatch.score.toFixed(2)})`,
+      );
 
       const info = await this.getAnimeInfo(bestMatch.id);
       if (!info || !info.episodes?.length) {
