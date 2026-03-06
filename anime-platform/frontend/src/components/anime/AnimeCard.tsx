@@ -65,7 +65,7 @@ export function AnimeCard({ anime, index = 0 }: AnimeCardProps) {
           </div>
 
           <div className="p-3">
-            <h3 className="text-sm font-medium text-dark-100 line-clamp-2 group-hover:text-primary-400 transition-colors">
+            <h3 className="text-sm font-medium text-dark-100 leading-5 h-10 line-clamp-2 group-hover:text-primary-400 transition-colors">
               {anime.title}
             </h3>
             <div className="flex items-center space-x-2 mt-1">
