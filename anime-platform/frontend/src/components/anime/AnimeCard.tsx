@@ -7,12 +7,9 @@ import { Star } from 'lucide-react';
 
 interface AnimeCardProps {
   anime: {
-    mal_id?: number;
-    malId?: number;
     id?: string;
     title?: string;
     name?: string;
-    images?: { jpg?: { large_image_url?: string; image_url?: string } };
     imageUrl?: string;
     poster?: string;
     score?: number;
@@ -27,12 +24,9 @@ interface AnimeCardProps {
 }
 
 export function AnimeCard({ anime, index = 0 }: AnimeCardProps) {
-  const malId = anime.mal_id || anime.malId;
-  const href = anime.href || (anime.id ? `/watch/${anime.id}` : `/anime/${malId}`);
+  const href = anime.href || `/watch/${anime.id}`;
   const title = anime.title || anime.name || 'Untitled';
   const imageUrl =
-    anime.images?.jpg?.large_image_url ||
-    anime.images?.jpg?.image_url ||
     anime.imageUrl ||
     anime.poster ||
     '/placeholder.jpg';

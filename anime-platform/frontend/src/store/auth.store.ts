@@ -12,7 +12,7 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   register: (email: string, username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -23,35 +23,49 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isLoading: true,
 
-  login: async (email: string, password: string) => {
-    const { data } = await authApi.login({ email, password });
-    localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
+  login: async (email: string, password: string, rememberMe = false) => {
+    const { data } = await authApi.login({ email, password, rememberMe });
+    const storage = rememberMe ? localStorage : sessionStorage;
+    storage.setItem('accessToken', data.accessToken);
+    storage.setItem('refreshToken', data.refreshToken);
+    if (rememberMe) {
+      localStorage.setItem('rememberMe', 'true');
+    } else {
+      localStorage.removeItem('rememberMe');
+    }
     set({ user: data.user, isAuthenticated: true });
   },
 
   register: async (email: string, username: string, password: string) => {
     const { data } = await authApi.register({ email, username, password });
-    localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
+    sessionStorage.setItem('accessToken', data.accessToken);
+    sessionStorage.setItem('refreshToken', data.refreshToken);
+    localStorage.removeItem('rememberMe');
     set({ user: data.user, isAuthenticated: true });
   },
 
   logout: async () => {
     try {
-      const refreshToken = localStorage.getItem('refreshToken');
+      const remembered = localStorage.getItem('rememberMe') === 'true';
+      const storage = remembered ? localStorage : sessionStorage;
+      const refreshToken = storage.getItem('refreshToken');
       await authApi.logout(refreshToken || undefined);
     } catch {
       // Ignore logout errors
     }
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('rememberMe');
+    sessionStorage.removeItem('accessToken');
+    sessionStorage.removeItem('refreshToken');
     set({ user: null, isAuthenticated: false });
   },
 
   checkAuth: async () => {
     try {
-      const token = localStorage.getItem('accessToken');
+      const remembered = localStorage.getItem('rememberMe') === 'true';
+      const storage = remembered ? localStorage : sessionStorage;
+      const token = storage.getItem('accessToken');
       if (!token) {
         set({ isLoading: false });
         return;
@@ -61,6 +75,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
+      localStorage.removeItem('rememberMe');
+      sessionStorage.removeItem('accessToken');
+      sessionStorage.removeItem('refreshToken');
       set({ user: null, isAuthenticated: false, isLoading: false });
     }
   },

@@ -9,7 +9,9 @@ export class JwtMiddleware implements NestMiddleware {
   private readonly secret: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.secret = this.configService.get('JWT_SECRET', 'super-secret');
+    const secret = this.configService.get('JWT_SECRET');
+    if (!secret) throw new Error('JWT_SECRET environment variable is required');
+    this.secret = secret;
   }
 
   use(req: Request, res: Response, next: NextFunction) {

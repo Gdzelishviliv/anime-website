@@ -2,7 +2,7 @@
 
 > A production-grade, portfolio-ready microservices platform demonstrating distributed systems design, event-driven architecture, secure streaming simulation, and modern full-stack engineering.
 
-**⚠️ This is NOT a piracy platform.** All anime metadata is sourced from the public [Jikan API](https://jikan.moe/) (MyAnimeList). Video streaming uses demo/test HLS streams to demonstrate the streaming pipeline.
+**⚠️ This is NOT a piracy platform.** All anime metadata is sourced from HiAnime via the aniwatch scraper. Video streaming uses HLS streams to demonstrate the streaming pipeline.
 
 ---
 
@@ -47,7 +47,7 @@
 |---------|------|----------|-----------------|
 | **Auth Service** | 3001 | auth-db (PG:5432) | JWT authentication, registration, login, refresh tokens, token blacklisting via Redis, RBAC |
 | **User Service** | 3002 | user-db (PG:5433) | User profiles, watch history, continue watching, favorites, event-driven profile sync |
-| **Anime Service** | 3003 | anime-db (PG:5434) | Jikan API integration, multi-layer caching (Redis → DB → API), search, genre filtering, seasonal anime |
+| **Anime Service** | 3003 | anime-db (PG:5434) | HiAnime integration, Redis caching, search, genre filtering, category browsing, episode sources |
 | **Streaming Service** | 3004 | stream-db (PG:5435) | HLS manifest/segment serving, signed URL generation (HMAC-SHA256), MinIO storage, watch events |
 | **Subscription Service** | 3005 | sub-db (PG:5436) | Plan management (FREE/BASIC/PREMIUM), feature gating, subscription events |
 | **API Gateway** | 8080 | — | Nginx reverse proxy, rate limiting (5r/s auth, 30r/s API), CORS, security headers |
@@ -258,13 +258,11 @@ anime-platform/
 │   │   └── main.ts
 │   └── package.json
 │
-├── anime-service/              # Anime Metadata (Jikan API)
+├── anime-service/              # Anime Metadata (HiAnime)
 │   ├── src/
 │   │   ├── anime/
 │   │   │   ├── anime.controller.ts
-│   │   │   ├── anime.service.ts    # Multi-layer cache
-│   │   │   ├── jikan.service.ts    # External API client
-│   │   │   └── entities/           # AnimeCache entity
+│   │   │   └── consumet.service.ts  # HiAnime scraper client
 │   │   ├── redis/
 │   │   └── main.ts
 │   └── package.json
@@ -325,7 +323,7 @@ anime-platform/
 | **Service-per-database** | Demonstrates data isolation, independent schema evolution, and bounded contexts — a core microservices tenet |
 | **RabbitMQ over HTTP** | Shows event-driven architecture. Services remain loosely coupled; User Service doesn't call Auth Service directly |
 | **Nginx Gateway** | Single entry point with centralized rate limiting, CORS, and security headers — simulates production API gateway |
-| **Redis dual-use** | Cache layer for anime data (reducing Jikan API load) + token blacklist (immediate token revocation) |
+| **Redis dual-use** | Cache layer for anime data (reducing HiAnime API load) + token blacklist (immediate token revocation) |
 | **Signed URLs** | Demonstrates secure content delivery without exposing raw storage URLs — same pattern used by AWS CloudFront |
 
 ### What Would Change in Production?
@@ -384,15 +382,14 @@ GET  /api/auth/health                                        → 200
 
 ### Anime Endpoints
 ```
-GET /api/anime/trending                         → Airing anime
-GET /api/anime/top?page=1                       → Top rated anime
-GET /api/anime/search?q=naruto                  → Search by title
-GET /api/anime/genres                           → All MAL genres
-GET /api/anime/genre/:genreId?page=1            → Anime by genre
-GET /api/anime/season/now                       → Current season
-GET /api/anime/:id                              → Anime details
-GET /api/anime/:id/episodes                     → Episode list
-GET /api/anime/:id/recommendations              → Related anime
+GET /api/anime/watch/search?q=naruto            → Search anime
+GET /api/anime/watch/home                       → Home page data (spotlight, trending, etc.)
+GET /api/anime/watch/category/:category?page=1  → Browse by category
+GET /api/anime/watch/genre/:genre?page=1        → Browse by genre
+GET /api/anime/watch/episodes/:animeSlug        → Episode list for anime
+GET /api/anime/watch/find-episodes?q=title       → Find episodes by search
+GET /api/anime/watch/sources/:episodeId         → Streaming sources for episode
+GET /api/anime/watch/proxy?url=...&referer=...  → HLS proxy
 ```
 
 ### User Endpoints (Auth Required)
@@ -443,7 +440,7 @@ This project demonstrates:
 
 ## 📝 License
 
-This project is built for educational and portfolio purposes. Anime metadata is sourced from the public Jikan API (MyAnimeList).
+This project is built for educational and portfolio purposes. Anime metadata is sourced from HiAnime.
 
 MIT License — feel free to learn from and adapt this architecture.
 

@@ -15,10 +15,14 @@ import { RabbitMQModule } from '../rabbitmq/rabbitmq.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get('JWT_SECRET', 'super-secret'),
-        signOptions: { expiresIn: config.get('JWT_EXPIRES_IN', '15m') },
-      }),
+      useFactory: (config: ConfigService) => {
+        const secret = config.get('JWT_SECRET');
+        if (!secret) throw new Error('JWT_SECRET environment variable is required');
+        return {
+          secret,
+          signOptions: { expiresIn: config.get('JWT_EXPIRES_IN', '15m') },
+        };
+      },
     }),
     RedisModule,
     RabbitMQModule,

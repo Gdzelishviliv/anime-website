@@ -80,7 +80,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const tokens = await this.generateTokens(user);
+    const tokens = await this.generateTokens(user, dto.rememberMe);
 
     return {
       user: {
@@ -158,17 +158,20 @@ export class AuthService {
     return !!result;
   }
 
-  private async generateTokens(user: User) {
+  private async generateTokens(user: User, rememberMe = false) {
     const payload = { sub: user.id, email: user.email, role: user.role };
 
+    const accessExpiresIn = rememberMe ? '1h' : this.configService.get('JWT_EXPIRES_IN', '15m');
+    const refreshExpiresIn = rememberMe ? '30d' : this.configService.get('JWT_REFRESH_EXPIRES_IN', '7d');
+
     const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload),
+      this.jwtService.signAsync(payload, { expiresIn: accessExpiresIn }),
       this.jwtService.signAsync(payload, {
         secret: this.configService.get('JWT_REFRESH_SECRET'),
-        expiresIn: this.configService.get('JWT_REFRESH_EXPIRES_IN', '7d'),
+        expiresIn: refreshExpiresIn,
       }),
     ]);
 
-    return { accessToken, refreshToken };
+    return { accessToken, refreshToken, expiresIn: accessExpiresIn };
   }
 }

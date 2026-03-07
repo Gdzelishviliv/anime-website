@@ -92,19 +92,8 @@ export function Navbar() {
 
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2 sm:gap-2.5 group shrink-0">
-              <div className="relative w-8 h-8 sm:w-9 sm:h-9">
-                <div className="absolute inset-0 bg-primary-500/20 rounded-xl blur-lg group-hover:bg-primary-500/30 transition-colors" />
-                <svg viewBox="0 0 32 32" className="relative w-8 h-8 sm:w-9 sm:h-9 drop-shadow-lg" fill="none">
-                  <rect width="32" height="32" rx="8" fill="url(#nav-logo-bg)" />
-                  <path d="M3 16 Q16 5 29 16 Q16 27 3 16 Z" stroke="white" strokeWidth="2" strokeLinejoin="round" />
-                  <path d="M13.5 12 L22 16 L13.5 20 Z" fill="white" />
-                  <defs>
-                    <linearGradient id="nav-logo-bg" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="#4f46e5" />
-                      <stop offset="100%" stopColor="#7c3aed" />
-                    </linearGradient>
-                  </defs>
-                </svg>
+              <div className="w-8 h-8 sm:w-9 sm:h-9 bg-primary-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-sm">A</span>
               </div>
               <span className="text-lg sm:text-xl font-bold bg-gradient-to-r from-white to-dark-300 bg-clip-text text-transparent hidden xs:inline">
                 Ani<span className="bg-gradient-to-r from-primary-400 to-primary-500 bg-clip-text text-transparent">Stream</span>

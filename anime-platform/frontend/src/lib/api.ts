@@ -20,7 +20,9 @@ const createClient = (baseURL: string): AxiosInstance => {
 function attachInterceptors(client: AxiosInstance) {
   client.interceptors.request.use((config) => {
     if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('accessToken');
+      const remembered = localStorage.getItem('rememberMe') === 'true';
+      const storage = remembered ? localStorage : sessionStorage;
+      const token = storage.getItem('accessToken');
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -37,21 +39,26 @@ function attachInterceptors(client: AxiosInstance) {
         originalRequest._retry = true;
 
         try {
-          const refreshToken = localStorage.getItem('refreshToken');
+          const remembered = localStorage.getItem('rememberMe') === 'true';
+          const storage = remembered ? localStorage : sessionStorage;
+          const refreshToken = storage.getItem('refreshToken');
           if (!refreshToken) throw new Error('No refresh token');
 
           const { data } = await axios.post(`${AUTH_URL}/auth/refresh`, {
             refreshToken,
           });
 
-          localStorage.setItem('accessToken', data.accessToken);
-          localStorage.setItem('refreshToken', data.refreshToken);
+          storage.setItem('accessToken', data.accessToken);
+          storage.setItem('refreshToken', data.refreshToken);
 
           originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
           return client(originalRequest);
         } catch {
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
+          localStorage.removeItem('rememberMe');
+          sessionStorage.removeItem('accessToken');
+          sessionStorage.removeItem('refreshToken');
           if (typeof window !== 'undefined') {
             window.location.href = '/login';
           }
@@ -76,7 +83,7 @@ const api = authClient;
 export const authApi = {
   register: (data: { email: string; username: string; password: string }) =>
     authClient.post('/auth/register', data),
-  login: (data: { email: string; password: string }) =>
+  login: (data: { email: string; password: string; rememberMe?: boolean }) =>
     authClient.post('/auth/login', data),
   logout: (refreshToken?: string) =>
     authClient.post('/auth/logout', { refreshToken }),
@@ -87,24 +94,7 @@ export const authApi = {
 
 // ---- Anime API ----
 export const animeApi = {
-  getTrending: (page = 1, limit = 25) =>
-    animeClient.get(`/anime/trending?page=${page}&limit=${limit}`),
-  getTop: (page = 1, limit = 25) =>
-    animeClient.get(`/anime/top?page=${page}&limit=${limit}`),
-  getById: (id: number) => animeClient.get(`/anime/${id}`),
-  getEpisodes: (id: number, page = 1) =>
-    animeClient.get(`/anime/${id}/episodes?page=${page}`),
-  search: (q: string, page = 1) =>
-    animeClient.get(`/anime/search?q=${q}&page=${page}`),
-  getGenres: () => animeClient.get('/anime/genres'),
-  getByGenre: (genreId: number, page = 1) =>
-    animeClient.get(`/anime/genre/${genreId}?page=${page}`),
-  getSeasonNow: (page = 1) => animeClient.get(`/anime/season/now?page=${page}`),
-  getRecommendations: (id: number) =>
-    animeClient.get(`/anime/${id}/recommendations`),
-  getRelations: (id: number) =>
-    animeClient.get(`/anime/${id}/relations`),
-  // Watch / streaming source endpoints (Consumet)
+  // Watch / streaming source endpoints (HiAnime)
   watchSearch: (query: string) =>
     animeClient.get(`/anime/watch/search?q=${encodeURIComponent(query)}`),
   watchEpisodes: (animeSlug: string, provider?: string) =>
@@ -112,7 +102,6 @@ export const animeApi = {
   findEpisodes: (title: string) =>
     animeClient.get(`/anime/watch/find-episodes?title=${encodeURIComponent(title)}`),
   watchSources: (episodeId: string, provider?: string, category?: 'sub' | 'dub') => {
-    // Episode IDs can be "slug?ep=12345" — split into path + query param
     const [slug, epPart] = episodeId.split('?ep=');
     const params = new URLSearchParams();
     if (epPart) params.set('ep', epPart);
@@ -121,7 +110,6 @@ export const animeApi = {
     const qs = params.toString();
     return animeClient.get(`/anime/watch/sources/${encodeURIComponent(slug)}${qs ? `?${qs}` : ''}`);
   },
-  // Aniwatch database endpoints
   watchHome: () => animeClient.get('/anime/watch/home'),
   watchCategory: (category: string, page = 1) =>
     animeClient.get(`/anime/watch/category/${encodeURIComponent(category)}?page=${page}`),

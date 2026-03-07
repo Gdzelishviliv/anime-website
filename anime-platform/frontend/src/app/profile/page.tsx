@@ -275,9 +275,9 @@ export default function ProfilePage() {
                     <div key={fav.id} className="relative group/fav">
                       <AnimeCard
                         anime={{
-                          malId: fav.animeId,
                           title: fav.animeTitle || `Anime #${fav.animeId}`,
                           imageUrl: fav.thumbnailUrl,
+                          href: `/search?q=${encodeURIComponent(fav.animeTitle || '')}`,
                         }}
                         index={i}
                       />

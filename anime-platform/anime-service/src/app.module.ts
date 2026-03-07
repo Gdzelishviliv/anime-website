@@ -11,25 +11,26 @@ import { RedisModule } from './redis/redis.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
+        const isProduction = config.get('NODE_ENV') === 'production';
         const dbUrl = config.get('DATABASE_URL');
         if (dbUrl) {
           return {
             type: 'postgres',
             url: dbUrl,
-            ssl: { rejectUnauthorized: false },
+            ssl: isProduction ? { rejectUnauthorized: false } : false,
             autoLoadEntities: true,
-            synchronize: true,
+            synchronize: !isProduction,
           };
         }
         return {
           type: 'postgres',
           host: config.get('DB_HOST', 'localhost'),
           port: config.get<number>('DB_PORT', 5432),
-          username: config.get('DB_USER', 'anime_user'),
-          password: config.get('DB_PASSWORD', 'anime_secret_password'),
+          username: config.get('DB_USER', 'postgres'),
+          password: config.get('DB_PASSWORD'),
           database: config.get('DB_NAME', 'anime_db'),
           autoLoadEntities: true,
-          synchronize: true,
+          synchronize: !isProduction,
         };
       },
     }),

@@ -7,83 +7,18 @@ import {
   Res,
   HttpException,
   HttpStatus,
-  ParseIntPipe,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import axios from 'axios';
-import { AnimeService } from './anime.service';
 import { ConsumetService } from './consumet.service';
 
 @ApiTags('Anime')
 @Controller('anime')
 export class AnimeController {
   constructor(
-    private readonly animeService: AnimeService,
     private readonly consumetService: ConsumetService,
   ) {}
-
-  @Get('trending')
-  @ApiOperation({ summary: 'Get trending (currently airing) anime' })
-  @ApiQuery({ name: 'page', required: false })
-  @ApiQuery({ name: 'limit', required: false })
-  async getTrending(
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
-  ) {
-    return this.animeService.getTrending(page || 1, limit || 25);
-  }
-
-  @Get('top')
-  @ApiOperation({ summary: 'Get top rated anime' })
-  @ApiQuery({ name: 'page', required: false })
-  @ApiQuery({ name: 'limit', required: false })
-  async getTop(
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
-  ) {
-    return this.animeService.getTopAnime(page || 1, limit || 25);
-  }
-
-  @Get('search')
-  @ApiOperation({ summary: 'Search anime by query' })
-  @ApiQuery({ name: 'q', required: true })
-  @ApiQuery({ name: 'page', required: false })
-  @ApiQuery({ name: 'limit', required: false })
-  @ApiQuery({ name: 'genres', required: false })
-  async search(
-    @Query('q') query: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
-    @Query('genres') genres?: string,
-  ) {
-    return this.animeService.searchAnime(query, page || 1, limit || 25, genres);
-  }
-
-  @Get('genres')
-  @ApiOperation({ summary: 'Get list of all genres' })
-  async getGenres() {
-    return this.animeService.getGenres();
-  }
-
-  @Get('season/now')
-  @ApiOperation({ summary: 'Get current season anime' })
-  async getSeasonNow(
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
-  ) {
-    return this.animeService.getSeasonNow(page || 1, limit || 25);
-  }
-
-  @Get('genre/:genreId')
-  @ApiOperation({ summary: 'Get anime by genre' })
-  async getByGenre(
-    @Param('genreId', ParseIntPipe) genreId: number,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
-  ) {
-    return this.animeService.getAnimeByGenre(genreId, page || 1, limit || 25);
-  }
 
   @Get('watch/search')
   @ApiOperation({ summary: 'Search for watchable anime by title' })
@@ -94,7 +29,7 @@ export class AnimeController {
   }
 
   @Get('watch/home')
-  @ApiOperation({ summary: 'Get aniwatch home page data (spotlight, trending, etc.)' })
+  @ApiOperation({ summary: 'Get home page data (spotlight, trending, etc.)' })
   async watchHome() {
     const data = await this.consumetService.getHomePage();
     return { data };
@@ -148,7 +83,6 @@ export class AnimeController {
     @Query('ep') ep?: string,
     @Query('category') category?: 'sub' | 'dub',
   ) {
-    // The episode ID format is "anime-slug?ep=123" but ?ep=123 gets parsed as query param
     const fullEpisodeId = ep ? `${episodeId}?ep=${ep}` : episodeId;
     const sources = await this.consumetService.getEpisodeSources(fullEpisodeId, provider, category);
     if (!sources) {
@@ -188,7 +122,6 @@ export class AnimeController {
       if (referer) {
         headers['Referer'] = referer;
       }
-      // Forward Range header for seeking in MP4
       if (req.headers.range) {
         headers['Range'] = req.headers.range;
       }
@@ -202,7 +135,6 @@ export class AnimeController {
       const contentType = response.headers['content-type'] || 'application/octet-stream';
       const statusCode = response.status;
 
-      // For M3U8 manifests, buffer and rewrite URLs
       if (contentType.includes('mpegurl') || contentType.includes('m3u8') || url.endsWith('.m3u8')) {
         const chunks: Buffer[] = [];
         for await (const chunk of response.data) {
@@ -229,7 +161,6 @@ export class AnimeController {
         return;
       }
 
-      // Stream all other content (MP4, segments, keys) directly via pipe
       res.status(statusCode);
       res.setHeader('Content-Type', contentType);
       if (response.headers['content-length']) {
@@ -247,33 +178,6 @@ export class AnimeController {
         res.status(502).json({ message: 'Failed to proxy stream' });
       }
     }
-  }
-
-  @Get(':id/relations')
-  @ApiOperation({ summary: 'Get anime relations (sequels, prequels, etc.) and airing info' })
-  async getRelations(@Param('id', ParseIntPipe) id: number) {
-    return { data: await this.animeService.getAnimeRelations(id) };
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get anime by MAL ID' })
-  async getById(@Param('id', ParseIntPipe) id: number) {
-    return this.animeService.getAnimeById(id);
-  }
-
-  @Get(':id/episodes')
-  @ApiOperation({ summary: 'Get anime episodes' })
-  async getEpisodes(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('page') page?: number,
-  ) {
-    return this.animeService.getAnimeEpisodes(id, page || 1);
-  }
-
-  @Get(':id/recommendations')
-  @ApiOperation({ summary: 'Get anime recommendations' })
-  async getRecommendations(@Param('id', ParseIntPipe) id: number) {
-    return this.animeService.getRecommendations(id);
   }
 
   @Get('health')

@@ -101,13 +101,6 @@ export default function HomePage() {
         setTrendingRaw((home.trendingAnimes || []).slice(0, 15));
         setLatestEpisodes((home.latestEpisodeAnimes || []).slice(0, 12).map(mapAniwatchAnime));
         setTopAiring((home.topAiringAnimes || []).slice(0, 12).map(mapAniwatchAnime));
-      } else {
-        const [trendingRes, topRes] = await Promise.all([
-          animeApi.getTrending(1, 12),
-          animeApi.getTop(1, 12),
-        ]);
-        setLatestEpisodes(trendingRes.data?.data || []);
-        setTopAiring(topRes.data?.data || []);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load anime data');
