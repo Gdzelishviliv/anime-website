@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, List, AlertTriangle, Play, Home, Tv } from 'lucide-react';
+import { ChevronLeft, ChevronRight, List, AlertTriangle, Play, Home, Tv, Languages } from 'lucide-react';
 import { animeApi, userApi } from '@/lib/api';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
 import { LoadingSpinner } from '@/components/ui/Loading';
@@ -32,6 +32,8 @@ export default function EpisodePage() {
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [category, setCategory] = useState<'sub' | 'dub'>('sub');
+  const [activeCategory, setActiveCategory] = useState<'sub' | 'dub' | null>(null);
 
   // Fetch anime info and find streaming episodes
   const fetchData = async () => {
@@ -93,8 +95,12 @@ export default function EpisodePage() {
     }
 
     try {
-      const sourcesRes = await animeApi.watchSources(episode.id, provider);
+      const sourcesRes = await animeApi.watchSources(episode.id, provider, category);
       const sourcesData = sourcesRes.data?.data;
+
+      if (sourcesData?.category) {
+        setActiveCategory(sourcesData.category);
+      }
 
       // Prefer MP4 download URLs (native video playback, no HLS codec issues)
       if (sourcesData?.download?.length) {
@@ -154,7 +160,7 @@ export default function EpisodePage() {
       setSourceError(null);
       fetchStreamSource();
     }
-  }, [consumetEpisodes, episodeNumber]);
+  }, [consumetEpisodes, episodeNumber, category]);
 
   const handleProgress = useCallback(
     (currentTime: number, duration: number) => {
@@ -205,6 +211,30 @@ export default function EpisodePage() {
 
           {/* Episode Navigation */}
           <div className="flex items-center gap-2">
+            {/* Sub/Dub Toggle */}
+            <div className="flex items-center bg-dark-800 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setCategory('sub')}
+                className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                  category === 'sub'
+                    ? 'bg-primary-500 text-white'
+                    : 'text-dark-400 hover:text-white'
+                }`}
+              >
+                SUB
+              </button>
+              <button
+                onClick={() => setCategory('dub')}
+                className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                  category === 'dub'
+                    ? 'bg-primary-500 text-white'
+                    : 'text-dark-400 hover:text-white'
+                }`}
+              >
+                DUB
+              </button>
+            </div>
+
             <button
               onClick={() => hasPrev && router.push(`/anime/${animeId}/episode/${episodeNumber - 1}`)}
               disabled={!hasPrev}
@@ -302,6 +332,21 @@ export default function EpisodePage() {
                 </Link>
                 {anime?.type && (
                   <span className="text-xs text-dark-500 bg-dark-800 px-2 py-0.5 rounded">{anime.type}</span>
+                )}
+                {activeCategory && (
+                  <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                    activeCategory === 'dub'
+                      ? 'bg-blue-500/20 text-blue-400'
+                      : 'bg-primary-500/20 text-primary-400'
+                  }`}>
+                    {activeCategory === 'dub' ? 'English Dub' : 'Japanese Sub'}
+                  </span>
+                )}
+                {subtitles.length > 0 && (
+                  <span className="text-xs px-2 py-0.5 rounded bg-dark-700 text-dark-300">
+                    <Languages className="w-3 h-3 inline mr-1" />
+                    {subtitles.length} subtitle{subtitles.length !== 1 ? 's' : ''}
+                  </span>
                 )}
               </div>
             </motion.div>

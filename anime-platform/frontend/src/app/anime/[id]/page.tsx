@@ -28,6 +28,7 @@ export default function AnimeDetailPage() {
 
   const [anime, setAnime] = useState<any>(null);
   const [episodes, setEpisodes] = useState<any[]>([]);
+  const [aniwatchData, setAniwatchData] = useState<any>(null);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [isFavorite, setIsFavorite] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -54,6 +55,23 @@ export default function AnimeDetailPage() {
       if (recsRes.status === 'fulfilled') {
         const recsData = recsRes.value.data?.data || [];
         setRecommendations(recsData.slice(0, 6).map((r: any) => r.entry));
+      }
+
+      // Try to find aniwatch episodes for direct streaming links
+      if (animeData?.title) {
+        try {
+          const titles = [animeData.title, animeData.title_english].filter(Boolean);
+          for (const t of titles) {
+            const findRes = await animeApi.findEpisodes(t);
+            const found = findRes.data?.data || findRes.data;
+            if (found?.animeId && found.episodes?.length) {
+              setAniwatchData(found);
+              break;
+            }
+          }
+        } catch {
+          // Aniwatch search failed, fall back to Jikan-only episodes
+        }
       }
 
       // Check if favorited
@@ -215,7 +233,11 @@ export default function AnimeDetailPage() {
             {/* Actions */}
             <div className="flex items-center gap-4 mb-8">
               <Link
-                href={`/anime/${id}/episode/1`}
+                href={
+                  aniwatchData?.animeId && aniwatchData.episodes?.length
+                    ? `/watch/${aniwatchData.animeId}/episode/${aniwatchData.episodes[0].id}`
+                    : `/anime/${id}/episode/1`
+                }
                 className="btn-primary flex items-center space-x-2"
               >
                 <Play className="w-4 h-4" />
@@ -251,7 +273,7 @@ export default function AnimeDetailPage() {
         </div>
 
         {/* Episodes */}
-        {episodes.length > 0 && (
+        {(aniwatchData?.episodes?.length || episodes.length > 0) && (
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -260,30 +282,50 @@ export default function AnimeDetailPage() {
           >
             <h2 className="text-2xl font-bold text-dark-100 mb-6">Episodes</h2>
             <div className="grid gap-3">
-              {episodes.map((ep: any, idx: number) => (
-                <Link
-                  key={ep.mal_id || idx}
-                  href={`/anime/${id}/episode/${idx + 1}`}
-                  className="card p-4 flex items-center justify-between hover:border-primary-500/50 transition-all group"
-                >
-                  <div className="flex items-center space-x-4">
-                    <span className="text-dark-500 font-mono text-sm w-8">
-                      {String(idx + 1).padStart(2, '0')}
-                    </span>
-                    <div>
-                      <h3 className="text-dark-200 font-medium group-hover:text-primary-400 transition-colors">
-                        {ep.title || `Episode ${idx + 1}`}
-                      </h3>
-                      {ep.aired && (
-                        <span className="text-dark-500 text-xs">
-                          {new Date(ep.aired).toLocaleDateString()}
+              {aniwatchData?.episodes?.length
+                ? aniwatchData.episodes.map((ep: any, idx: number) => (
+                    <Link
+                      key={ep.id}
+                      href={`/watch/${aniwatchData.animeId}/episode/${ep.id}`}
+                      className="card p-4 flex items-center justify-between hover:border-primary-500/50 transition-all group"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <span className="text-dark-500 font-mono text-sm w-8">
+                          {String(ep.number || idx + 1).padStart(2, '0')}
                         </span>
-                      )}
-                    </div>
-                  </div>
-                  <Play className="w-5 h-5 text-dark-600 group-hover:text-primary-400 transition-colors" />
-                </Link>
-              ))}
+                        <div>
+                          <h3 className="text-dark-200 font-medium group-hover:text-primary-400 transition-colors">
+                            {ep.title || `Episode ${ep.number || idx + 1}`}
+                          </h3>
+                        </div>
+                      </div>
+                      <Play className="w-5 h-5 text-dark-600 group-hover:text-primary-400 transition-colors" />
+                    </Link>
+                  ))
+                : episodes.map((ep: any, idx: number) => (
+                    <Link
+                      key={ep.mal_id || idx}
+                      href={`/anime/${id}/episode/${idx + 1}`}
+                      className="card p-4 flex items-center justify-between hover:border-primary-500/50 transition-all group"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <span className="text-dark-500 font-mono text-sm w-8">
+                          {String(idx + 1).padStart(2, '0')}
+                        </span>
+                        <div>
+                          <h3 className="text-dark-200 font-medium group-hover:text-primary-400 transition-colors">
+                            {ep.title || `Episode ${idx + 1}`}
+                          </h3>
+                          {ep.aired && (
+                            <span className="text-dark-500 text-xs">
+                              {new Date(ep.aired).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <Play className="w-5 h-5 text-dark-600 group-hover:text-primary-400 transition-colors" />
+                    </Link>
+                  ))}
             </div>
           </motion.section>
         )}

@@ -59,18 +59,18 @@ export class ConsumetService {
     }
   }
 
-  async getEpisodeSources(episodeId: string, _provider?: string) {
+  async getEpisodeSources(episodeId: string, _provider?: string, category?: 'sub' | 'dub') {
     // Try servers in order: hd-2 (VidCloud, most reliable), hd-1 (VidStreaming)
     const servers: Array<'hd-2' | 'hd-1'> = ['hd-2', 'hd-1'];
-    const categories: Array<'sub' | 'dub'> = ['sub', 'dub'];
+    const categories: Array<'sub' | 'dub'> = category ? [category] : ['sub', 'dub'];
 
     for (const server of servers) {
-      for (const category of categories) {
+      for (const cat of categories) {
         try {
-          this.logger.log(`Trying server="${server}" category="${category}" for "${episodeId}"`);
-          const result: any = await this.scraper.getEpisodeSources(episodeId, server, category);
+          this.logger.log(`Trying server="${server}" category="${cat}" for "${episodeId}"`);
+          const result: any = await this.scraper.getEpisodeSources(episodeId, server, cat);
           if (result?.sources?.length) {
-            this.logger.log(`Got ${result.sources.length} source(s) from ${server}/${category}`);
+            this.logger.log(`Got ${result.sources.length} source(s) from ${server}/${cat}`);
             return {
               sources: result.sources.map((s: any) => ({
                 url: s.url,
@@ -83,10 +83,11 @@ export class ConsumetService {
                 .map((t: any) => ({ url: t.url, lang: t.lang })),
               intro: result.intro,
               outro: result.outro,
+              category: cat,
             };
           }
         } catch (error) {
-          this.logger.warn(`Server ${server}/${category} failed: ${(error as Error).message}`);
+          this.logger.warn(`Server ${server}/${cat} failed: ${(error as Error).message}`);
         }
       }
     }
@@ -113,6 +114,9 @@ export class ConsumetService {
     const na = this.normalizeTitle(a);
     const nb = this.normalizeTitle(b);
     if (na === nb) return 1;
+
+    // Check if one title contains the other entirely
+    if (na.includes(nb) || nb.includes(na)) return 0.9;
 
     const wordsA = new Set(na.split(' '));
     const wordsB = new Set(nb.split(' '));
@@ -144,6 +148,14 @@ export class ConsumetService {
       // Sort by score descending
       scored.sort((a, b) => b.score - a.score);
       const bestMatch = scored[0];
+
+      // Reject matches with low similarity (prevents "One Piece" → "One Punch Man")
+      if (bestMatch.score < 0.5) {
+        this.logger.warn(
+          `findEpisodes: query="${title}" -> best match "${bestMatch.title}" rejected (score=${bestMatch.score.toFixed(2)} < 0.5)`,
+        );
+        return { episodes: [], animeId: null, provider: null };
+      }
 
       this.logger.log(
         `findEpisodes: query="${title}" -> matched "${bestMatch.title}" (id=${bestMatch.id}, score=${bestMatch.score.toFixed(2)})`,

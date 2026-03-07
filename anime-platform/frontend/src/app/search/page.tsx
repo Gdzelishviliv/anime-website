@@ -25,24 +25,15 @@ function SearchContent() {
     setLoading(true);
     setSearched(true);
     try {
-      // Search both Jikan and aniwatch in parallel
-      const [jikanRes, aniwatchRes] = await Promise.allSettled([
-        animeApi.search(q),
-        animeApi.watchSearch(q),
-      ]);
-
-      const jikanResults = jikanRes.status === 'fulfilled' ? (jikanRes.value.data.data || jikanRes.value.data || []) : [];
-      const aniwatchResults = aniwatchRes.status === 'fulfilled' ? (aniwatchRes.value.data.data || []).map((a: any) => ({
-        title: a.title || a.name,
-        imageUrl: a.image || a.poster,
+      const res = await animeApi.watchSearch(q);
+      const animes = (res.data.data || res.data || []).map((a: any) => ({
+        id: a.id,
+        name: a.title || a.name,
+        poster: a.image || a.poster,
         type: a.type,
-        episodes: a.episodes?.sub || a.episodes?.total || 0,
-        href: `/search?q=${encodeURIComponent(a.title || a.name || '')}`,
-      })) : [];
-
-      // Combine: Jikan results first (they have MAL IDs for linking), then aniwatch
-      const combined = [...jikanResults, ...aniwatchResults];
-      setResults(combined);
+        episodes: a.episodes,
+      }));
+      setResults(animes);
     } catch (err) {
       console.error('Search failed:', err);
       setResults([]);
@@ -94,7 +85,7 @@ function SearchContent() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {results.map((anime: any, idx: number) => (
               <motion.div
-                key={anime.mal_id || `aw-${idx}`}
+                key={anime.id || idx}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: Math.min(idx * 0.03, 0.5) }}

@@ -111,12 +111,13 @@ export const animeApi = {
     animeClient.get(`/anime/watch/episodes/${encodeURIComponent(animeSlug)}${provider ? `?provider=${provider}` : ''}`),
   findEpisodes: (title: string) =>
     animeClient.get(`/anime/watch/find-episodes?title=${encodeURIComponent(title)}`),
-  watchSources: (episodeId: string, provider?: string) => {
+  watchSources: (episodeId: string, provider?: string, category?: 'sub' | 'dub') => {
     // Episode IDs can be "slug?ep=12345" — split into path + query param
     const [slug, epPart] = episodeId.split('?ep=');
     const params = new URLSearchParams();
     if (epPart) params.set('ep', epPart);
     if (provider) params.set('provider', provider);
+    if (category) params.set('category', category);
     const qs = params.toString();
     return animeClient.get(`/anime/watch/sources/${encodeURIComponent(slug)}${qs ? `?${qs}` : ''}`);
   },

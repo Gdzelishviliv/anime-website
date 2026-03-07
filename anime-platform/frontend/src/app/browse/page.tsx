@@ -1,16 +1,27 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Filter, X, Search, ChevronDown, ChevronUp, Sparkles, TrendingUp, RefreshCw } from 'lucide-react';
+import { Filter, X, Search, ChevronDown, ChevronUp, Sparkles, TrendingUp, RefreshCw, Flame, Heart, Clock, Star, CalendarPlus, ArrowUpCircle } from 'lucide-react';
 import { animeApi } from '@/lib/api';
 import { AnimeCard } from '@/components/anime/AnimeCard';
 import { AnimeGridSkeleton } from '@/components/ui/Loading';
 import { ErrorDisplay } from '@/components/ui/ErrorDisplay';
 
+const CATEGORIES = [
+  { key: 'most-popular', label: 'Most Popular', icon: TrendingUp },
+  { key: 'top-airing', label: 'Top Airing', icon: Flame },
+  { key: 'most-favorite', label: 'Most Favorite', icon: Heart },
+  { key: 'latest-completed', label: 'Completed', icon: Star },
+  { key: 'recently-updated', label: 'Recently Updated', icon: Clock },
+  { key: 'recently-added', label: 'Recently Added', icon: CalendarPlus },
+  { key: 'top-upcoming', label: 'Upcoming', icon: ArrowUpCircle },
+];
+
 export default function BrowsePage() {
-  const [genres, setGenres] = useState<any[]>([]);
-  const [selectedGenre, setSelectedGenre] = useState<number | null>(null);
+  const [genres, setGenres] = useState<string[]>([]);
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState('most-popular');
   const [anime, setAnime] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingAnime, setLoadingAnime] = useState(false);
@@ -26,27 +37,27 @@ export default function BrowsePage() {
   }, []);
 
   const loadInitialData = async () => {
-    // Load genres first, then anime with small delay to avoid Jikan rate limiting
     try {
       setGenresLoading(true);
-      const genresRes = await animeApi.getGenres();
-      setGenres(genresRes.data.data || genresRes.data || []);
+      const homeRes = await animeApi.watchHome();
+      const homeData = homeRes.data.data || homeRes.data || {};
+      setGenres(homeData.genres || []);
     } catch (err) {
       console.error('Failed to load genres:', err);
     } finally {
       setGenresLoading(false);
     }
-    // Small delay to avoid Jikan rate limit (3 req/s)
-    await new Promise(r => setTimeout(r, 400));
-    await loadTopAnime();
+    await loadCategory('most-popular');
   };
 
-  const loadTopAnime = async () => {
+  const loadCategory = async (category: string) => {
     try {
-      const res = await animeApi.getTop(1);
-      const data = res.data.data || res.data || [];
-      setAnime(data);
-      setHasMore(data.length >= 20);
+      setLoading(true);
+      const res = await animeApi.watchCategory(category, 1);
+      const data = res.data.data || res.data || {};
+      setAnime(data.animes || []);
+      setHasMore(data.hasNextPage || false);
+      setPage(1);
     } catch (err: any) {
       setError(err.message || 'Failed to load anime');
     } finally {
@@ -54,17 +65,36 @@ export default function BrowsePage() {
     }
   };
 
-  const loadByGenre = async (genreId: number) => {
-    if (selectedGenre === genreId) return; // Already selected
-    setSelectedGenre(genreId);
+  const switchCategory = async (category: string) => {
+    if (activeCategory === category && !selectedGenre) return;
+    setSelectedGenre(null);
+    setActiveCategory(category);
     setLoadingAnime(true);
     setError('');
     setPage(1);
     try {
-      const res = await animeApi.getByGenre(genreId, 1);
-      const data = res.data.data || res.data || [];
-      setAnime(data);
-      setHasMore(data.length >= 20);
+      const res = await animeApi.watchCategory(category, 1);
+      const data = res.data.data || res.data || {};
+      setAnime(data.animes || []);
+      setHasMore(data.hasNextPage || false);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load anime');
+    } finally {
+      setLoadingAnime(false);
+    }
+  };
+
+  const loadByGenre = async (genre: string) => {
+    if (selectedGenre === genre) return;
+    setSelectedGenre(genre);
+    setLoadingAnime(true);
+    setError('');
+    setPage(1);
+    try {
+      const res = await animeApi.watchGenre(genre, 1);
+      const data = res.data.data || res.data || {};
+      setAnime(data.animes || []);
+      setHasMore(data.hasNextPage || false);
     } catch (err: any) {
       setError(err.message || 'Failed to load anime for this genre');
     } finally {
@@ -78,11 +108,11 @@ export default function BrowsePage() {
     setLoadingAnime(true);
     try {
       const res = selectedGenre
-        ? await animeApi.getByGenre(selectedGenre, nextPage)
-        : await animeApi.getTop(nextPage);
-      const data = res.data.data || res.data || [];
-      setAnime((prev) => [...prev, ...data]);
-      setHasMore(data.length >= 20);
+        ? await animeApi.watchGenre(selectedGenre, nextPage)
+        : await animeApi.watchCategory(activeCategory, nextPage);
+      const data = res.data.data || res.data || {};
+      setAnime((prev) => [...prev, ...(data.animes || [])]);
+      setHasMore(data.hasNextPage || false);
     } catch (err: any) {
       console.error('Failed to load more:', err);
     } finally {
@@ -93,19 +123,22 @@ export default function BrowsePage() {
   const clearFilter = () => {
     setSelectedGenre(null);
     setError('');
-    setLoading(true);
-    loadTopAnime();
+    setLoadingAnime(true);
+    animeApi.watchCategory(activeCategory, 1).then(res => {
+      const data = res.data.data || res.data || {};
+      setAnime(data.animes || []);
+      setHasMore(data.hasNextPage || false);
+      setPage(1);
+    }).catch(() => {}).finally(() => setLoadingAnime(false));
   };
 
   if (loading && genresLoading) return <AnimeGridSkeleton />;
   if (error && anime.length === 0 && !genresLoading)
     return <ErrorDisplay message={error} onRetry={() => { setError(''); setLoading(true); loadInitialData(); }} />;
 
-  const selectedGenreName = genres.find((g: any) => g.mal_id === selectedGenre)?.name;
-
   // Filter genres by search
   const filteredGenres = genreSearch
-    ? genres.filter((g: any) => g.name.toLowerCase().includes(genreSearch.toLowerCase()))
+    ? genres.filter((g) => g.toLowerCase().includes(genreSearch.toLowerCase()))
     : genres;
 
   // Show limited genres unless expanded
@@ -123,10 +156,10 @@ export default function BrowsePage() {
             animate={{ opacity: 1, x: 0 }}
           >
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-              {selectedGenreName ? (
+              {selectedGenre ? (
                 <>
                   <Sparkles className="w-7 h-7 text-primary-400" />
-                  {selectedGenreName} Anime
+                  {selectedGenre} Anime
                 </>
               ) : (
                 <>
@@ -137,7 +170,7 @@ export default function BrowsePage() {
             </h1>
             {selectedGenre && (
               <p className="text-dark-400 text-sm mt-1">
-                Showing anime in the {selectedGenreName} genre
+                Showing anime in the {selectedGenre} genre
               </p>
             )}
           </motion.div>
@@ -155,7 +188,34 @@ export default function BrowsePage() {
           )}
         </div>
 
-        {/* Genre Filter Section — Always Visible */}
+        {/* Category Tabs */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4"
+        >
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {CATEGORIES.map((cat) => {
+              const Icon = cat.icon;
+              return (
+                <button
+                  key={cat.key}
+                  onClick={() => switchCategory(cat.key)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200 ${
+                    activeCategory === cat.key && !selectedGenre
+                      ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/25'
+                      : 'bg-dark-800 text-dark-300 hover:bg-dark-700 hover:text-white border border-dark-700/50'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {cat.label}
+                </button>
+              );
+            })}
+          </div>
+        </motion.div>
+
+        {/* Genre Filter Section */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -207,28 +267,21 @@ export default function BrowsePage() {
               <>
                 <div className="flex flex-wrap gap-2">
                   <AnimatePresence mode="popLayout">
-                    {displayedGenres.map((genre: any) => (
+                    {displayedGenres.map((genre) => (
                       <motion.button
-                        key={genre.mal_id}
+                        key={genre}
                         layout
                         initial={{ opacity: 0, scale: 0.8 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.8 }}
-                        onClick={() => loadByGenre(genre.mal_id)}
+                        onClick={() => loadByGenre(genre)}
                         className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
-                          selectedGenre === genre.mal_id
+                          selectedGenre === genre
                             ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/25 ring-1 ring-primary-400'
                             : 'bg-dark-800 text-dark-300 hover:bg-dark-700 hover:text-white border border-dark-700/50 hover:border-dark-600'
                         }`}
                       >
-                        {genre.name}
-                        {genre.count && (
-                          <span className={`ml-1.5 text-[10px] ${
-                            selectedGenre === genre.mal_id ? 'text-primary-200' : 'text-dark-500'
-                          }`}>
-                            {genre.count.toLocaleString()}
-                          </span>
-                        )}
+                        {genre}
                       </motion.button>
                     ))}
                   </AnimatePresence>
@@ -260,7 +313,7 @@ export default function BrowsePage() {
 
         {/* Anime Grid */}
         <AnimatePresence mode="wait">
-          {loadingAnime && anime.length === 0 ? (
+          {(loading || loadingAnime) && anime.length === 0 ? (
             <motion.div
               key="loading"
               initial={{ opacity: 0 }}
@@ -269,7 +322,7 @@ export default function BrowsePage() {
             >
               <AnimeGridSkeleton />
             </motion.div>
-          ) : !loadingAnime && anime.length === 0 ? (
+          ) : !loading && !loadingAnime && anime.length === 0 ? (
             <motion.div
               key="empty"
               initial={{ opacity: 0 }}
@@ -284,7 +337,7 @@ export default function BrowsePage() {
             </motion.div>
           ) : (
             <motion.div
-              key={`grid-${selectedGenre || 'top'}`}
+              key={`grid-${selectedGenre || activeCategory}`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -293,7 +346,7 @@ export default function BrowsePage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                 {anime.map((item: any, idx: number) => (
                   <motion.div
-                    key={item.mal_id || idx}
+                    key={item.id || idx}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: Math.min(idx * 0.03, 0.5) }}

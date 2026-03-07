@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, List, Play, Home } from 'lucide-react';
+import { ChevronLeft, ChevronRight, List, Play, Home, Languages } from 'lucide-react';
 import { animeApi, userApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { VideoPlayer } from '@/components/player/VideoPlayer';
@@ -27,6 +27,8 @@ export default function WatchEpisodePage() {
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showEpisodeList, setShowEpisodeList] = useState(false);
+  const [category, setCategory] = useState<'sub' | 'dub'>('sub');
+  const [activeCategory, setActiveCategory] = useState<'sub' | 'dub' | null>(null);
   const { isAuthenticated, user } = useAuthStore();
 
   // Get anime info (episodes list)
@@ -44,13 +46,17 @@ export default function WatchEpisodePage() {
   };
 
   // Get streaming source for the current episode
-  const fetchSource = async () => {
+  const fetchSource = async (cat?: 'sub' | 'dub') => {
     try {
       setSourceLoading(true);
       setSourceError(null);
 
-      const sourcesRes = await animeApi.watchSources(episodeId);
+      const sourcesRes = await animeApi.watchSources(episodeId, undefined, cat || category);
       const sourcesData = sourcesRes.data?.data;
+
+      if (sourcesData?.category) {
+        setActiveCategory(sourcesData.category);
+      }
 
       if (sourcesData?.sources?.length) {
         const preferredQualities = ['1080p', '720p', 'default'];
@@ -92,7 +98,7 @@ export default function WatchEpisodePage() {
 
   useEffect(() => {
     if (episodeId) fetchSource();
-  }, [episodeId]);
+  }, [episodeId, category]);
 
   const handleProgress = useCallback(
     (currentTime: number, duration: number) => {
@@ -138,6 +144,30 @@ export default function WatchEpisodePage() {
             </Link>
           </div>
           <div className="flex items-center gap-2">
+            {/* Sub/Dub Toggle */}
+            <div className="flex items-center bg-dark-800 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setCategory('sub')}
+                className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                  category === 'sub'
+                    ? 'bg-primary-500 text-white'
+                    : 'text-dark-400 hover:text-white'
+                }`}
+              >
+                SUB
+              </button>
+              <button
+                onClick={() => setCategory('dub')}
+                className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                  category === 'dub'
+                    ? 'bg-primary-500 text-white'
+                    : 'text-dark-400 hover:text-white'
+                }`}
+              >
+                DUB
+              </button>
+            </div>
+
             {prevEp && (
               <Link
                 href={`/watch/${animeId}/episode/${prevEp.id}`}
@@ -200,6 +230,23 @@ export default function WatchEpisodePage() {
             <p className="text-dark-400 mt-1">
               Episode {currentEp?.number}: {currentEp?.title || `Episode ${currentEp?.number}`}
             </p>
+            <div className="flex items-center gap-2 mt-2">
+              {activeCategory && (
+                <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                  activeCategory === 'dub'
+                    ? 'bg-blue-500/20 text-blue-400'
+                    : 'bg-primary-500/20 text-primary-400'
+                }`}>
+                  {activeCategory === 'dub' ? 'English Dub' : 'Japanese Sub'}
+                </span>
+              )}
+              {subtitles.length > 0 && (
+                <span className="text-xs px-2 py-0.5 rounded bg-dark-700 text-dark-300">
+                  <Languages className="w-3 h-3 inline mr-1" />
+                  {subtitles.length} subtitle{subtitles.length !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
