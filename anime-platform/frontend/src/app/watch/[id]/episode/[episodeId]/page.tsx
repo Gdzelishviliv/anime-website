@@ -131,19 +131,19 @@ export default function WatchEpisodePage() {
     <div className="min-h-screen bg-dark-950">
       {/* Navigation bar */}
       <div className="bg-dark-900 border-b border-dark-800 px-4 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="text-dark-400 hover:text-primary-400 transition-colors">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-y-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <Link href="/" className="text-dark-400 hover:text-primary-400 transition-colors flex-shrink-0">
               <Home className="w-5 h-5" />
             </Link>
             <Link
               href={`/watch/${animeId}`}
-              className="text-dark-300 hover:text-primary-400 transition-colors text-sm font-medium truncate max-w-[200px] sm:max-w-none"
+              className="text-dark-300 hover:text-primary-400 transition-colors text-sm font-medium truncate max-w-[120px] xs:max-w-[180px] sm:max-w-[240px] md:max-w-[320px]"
             >
               {animeInfo?.title || 'Anime'}
             </Link>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
             {/* Sub/Dub Toggle */}
             <div className="flex items-center bg-dark-800 rounded-lg overflow-hidden">
               <button
